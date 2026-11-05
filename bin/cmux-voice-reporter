@@ -7,7 +7,7 @@
 #   VOICE=af_bella cmux-voice-reporter          # any Kokoro voice (af_heart, bf_emma,
 #                                                # blends like "af_heart,jf_alpha")
 #   VOICE=Samantha cmux-voice-reporter          # or any macOS `say` voice
-#   FALLBACK_VOICE=Tingting                      # `say` voice if the mini is down
+#   FALLBACK_VOICE=Tingting                      # `say` voice if Kokoro is down
 #   KOKORO_HOST=my-mini.local                    # ssh host running the Kokoro server
 #                                                # (unset: server on this machine)
 #   VOICE_SKIP_SURFACE=<uuid>                    # surface to stay silent for
