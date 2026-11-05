@@ -1,0 +1,36 @@
+#!/bin/bash
+# cmux-voice-say: speak one chosen headline in the same voice as
+# cmux-voice-reporter. An orchestrator session calls it to read out only the
+# reports that matter, alongside (or instead of) the per-pane announcements.
+#
+#   cmux-voice-say "api tests pushed; the flaky case now passes"
+#   touch ~/.cache/cmux-voice/master-mute   # silence; delete to unmute
+#   VOICE, FALLBACK_VOICE, KOKORO_HOST: as for cmux-voice-reporter
+set -u
+state=~/.cache/cmux-voice; mkdir -p "$state"
+[[ -e "$state/master-mute" ]] && exit 0
+voice=${VOICE:-af_nicole}
+fallback=${FALLBACK_VOICE:-Tingting}
+kokoro_host=${KOKORO_HOST:-}
+text=$*
+[[ -z "$text" ]] && { echo "usage: cmux-voice-say <headline>" >&2; exit 2; }
+printf '%s\tmaster\t%s\n' "$(date +%T)" "$text" >>"$state/spoken.log"
+
+kokoro_post() {  # stdin: JSON request, stdout: wav
+  local cmd='curl -sf --max-time 20 -X POST http://127.0.0.1:8880/v1/audio/speech -H content-type:application/json -d @-'
+  if [[ -n "$kokoro_host" ]]; then
+    ssh -o BatchMode=yes -o ConnectTimeout=3 "$kokoro_host" "$cmd"
+  else
+    eval "$cmd"
+  fi
+}
+
+wav="$state/master-line.wav"
+if [[ "$voice" =~ ^[a-z][fm]_[a-z]+(,[a-z][fm]_[a-z]+)*$ ]] &&
+   jq -n --arg t "$text" --arg v "$voice" \
+     '{model:"mlx-community/Kokoro-82M-bf16", input:$t, voice:$v, response_format:"wav"}' |
+   kokoro_post >"$wav" 2>/dev/null && [[ -s "$wav" ]]; then
+  afplay "$wav"
+else
+  say -v "$fallback" -- "$text"
+fi
