@@ -32,6 +32,22 @@ kokoro_post() {  # stdin: JSON request, stdout: wav
   fi
 }
 
+# One speaker at a time across the reporter, cmux-voice-say and the nudge.
+lock=$state/speaking.lock
+take_lock() {  # $1: seconds to wait
+  local waited=0 pid
+  until mkdir "$lock" 2>/dev/null; do
+    pid=$(cat "$lock/pid" 2>/dev/null)
+    if { [[ -n "$pid" ]] && ! kill -0 "$pid" 2>/dev/null; } ||
+       [[ -n $(find "$lock" -maxdepth 0 -mmin +2 2>/dev/null) ]]; then
+      rm -rf "$lock"; continue
+    fi
+    (( waited++ >= $1 )) && return 1
+    sleep 1
+  done
+  echo $$ >"$lock/pid"
+}
+
 # Kokoro voices look like af_nicole / bm_george (optionally comma-blended).
 speak() {
   if [[ "$voice" =~ ^[a-z][fm]_[a-z]+(,[a-z][fm]_[a-z]+)*$ ]]; then
@@ -80,7 +96,8 @@ while read -r ev; do
   line="$name finished: $(headline "$body")"
   printf '%s\tturn_end=%s\tspeak_start=%s\t%s\n' "$(date +%T)" "$ended" "$(now_ms)" "$line" >>"$state/spoken.log"
   echo "$(date +%T) $line"
-  speak "$line"
+  if take_lock 30; then speak "$line"; rm -rf "$lock"
+  else echo "$(date +%T) lock still held after 30s, speaking anyway"; speak "$line"; fi
   [[ -n "$once" ]] && break
 done < <(cmux events --name notification.created --no-ack --no-heartbeat \
            --reconnect --cursor-file "$state/seq")
