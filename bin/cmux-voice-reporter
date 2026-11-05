@@ -77,6 +77,17 @@ parse_row() {
   body=${rest%|*}
 }
 
+# On any exit, stop our children (the events reader's subshell and its
+# `cmux events`, or a playing afplay) and drop the lock if we hold it.
+cleanup() {
+  local c
+  for c in $(pgrep -P $$); do pkill -P "$c"; kill "$c"; done 2>/dev/null
+  [[ "$(cat "$lock/pid" 2>/dev/null)" == $$ ]] && rm -rf "$lock"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
 echo "voice reporter: voice=\"$voice\" skip=$skip mute=$state/mute"
 while read -r ev; do
   nid=$(jq -r '.payload.notification_id // empty' <<<"$ev")
@@ -101,4 +112,3 @@ while read -r ev; do
   [[ -n "$once" ]] && break
 done < <(cmux events --name notification.created --no-ack --no-heartbeat \
            --reconnect --cursor-file "$state/seq")
-pkill -f -- "--cursor-file $state/seq" 2>/dev/null
