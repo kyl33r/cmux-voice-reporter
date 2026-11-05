@@ -37,9 +37,35 @@ cmux new-split right --command ~/.local/bin/cmux-voice-reporter --focus false
 | `VOICE_SKIP_SURFACE` | unset | cmux surface UUID to stay silent for, such as an orchestrator pane |
 | `VOICE_ONLY_SURFACE` | unset | speak only for this surface (testing) |
 
-- Mute: `touch ~/.cache/cmux-voice/mute`; delete the file to unmute.
 - Log of spoken lines with timing: `~/.cache/cmux-voice/spoken.log`.
 - `--once` exits after the first spoken line.
+
+## Chosen headlines: cmux-voice-say
+
+`cmux-voice-say` speaks one headline you pick, in the same voice as the reporter. An orchestrator session can call it to read out only the reports that matter, alongside the per-pane announcements or instead of them.
+
+```bash
+cp bin/cmux-voice-say ~/.local/bin/
+cmux-voice-say "api tests pushed; the flaky case now passes"
+```
+
+- It reads the same `VOICE`, `FALLBACK_VOICE` and `KOKORO_HOST` settings as the reporter, and falls back to `say` the same way.
+- Each line goes to `~/.cache/cmux-voice/spoken.log` with the tag `master` in the second column, where reporter lines carry `turn_end=…`.
+- To speak only chosen headlines, mute the reporter and leave `cmux-voice-say` on.
+
+## Muting
+
+Each speaker has its own mute file in `~/.cache/cmux-voice/`. Create the file to mute; delete it to unmute.
+
+| File | Silences |
+|---|---|
+| `mute` | per-pane announcements from `cmux-voice-reporter` |
+| `master-mute` | chosen headlines from `cmux-voice-say` |
+
+```bash
+touch ~/.cache/cmux-voice/mute          # silence the reporter
+rm ~/.cache/cmux-voice/master-mute      # unmute cmux-voice-say
+```
 
 The Kokoro server listens on `127.0.0.1:8880` only. A remote client reaches it over ssh, so nothing is exposed on the network. The API is OpenAI-compatible: `POST /v1/audio/speech`.
 
