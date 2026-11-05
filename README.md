@@ -53,6 +53,15 @@ The Kokoro server listens on `127.0.0.1:8880` only. A remote client reaches it o
 - In zsh, `echo ===` fails (`== not found`) because `=word` is a command-path expansion.
 - mlx-audio's Kokoro needs `misaki[en]` plus the spaCy `en_core_web_sm` model installed up front, or synthesis fails outside a venv.
 
+## Skills for coding agents
+
+`skills/` holds agent skills (SKILL.md format) learned while building this:
+
+- `installing-tts-voices`: add macOS, Kokoro or other open-source mlx-audio voices, sample them, and wire them in.
+- `cmux-voice-reporter-ops`: start, restart and debug the reporter, including why a headline never plays.
+
+Copy them into `~/.claude/skills/` (Claude Code) or `~/.agents/skills/`.
+
 ## Options considered
 
 | Voice | Cost | Notes |
