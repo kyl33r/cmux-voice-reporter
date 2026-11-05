@@ -6,15 +6,37 @@
 #   cmux-voice-say "agent paging pushed; options cases now pass"
 #   touch ~/.cache/cmux-voice/master-mute   # silence; delete to unmute
 #   VOICE, FALLBACK_VOICE, KOKORO_HOST: as for cmux-voice-reporter
+#   VOICE_TAG=master       # tag for the spoken.log line
+#   VOICE_LOCK_WAIT=30     # seconds to wait for another speaker; 0 = skip if busy
+# Exits 3 when it skipped because another line was still playing.
 set -u
 state=~/.cache/cmux-voice; mkdir -p "$state"
 [[ -e "$state/master-mute" ]] && exit 0
 voice=${VOICE:-af_nicole}
 fallback=${FALLBACK_VOICE:-Tingting}
 kokoro_host=${KOKORO_HOST:-}
+tag=${VOICE_TAG:-master}
 text=$*
 [[ -z "$text" ]] && { echo "usage: cmux-voice-say <headline>" >&2; exit 2; }
-printf '%s\tmaster\t%s\n' "$(date +%T)" "$text" >>"$state/spoken.log"
+
+# One speaker at a time across the reporter, cmux-voice-say and the nudge.
+lock=$state/speaking.lock
+take_lock() {  # $1: seconds to wait
+  local waited=0 pid
+  until mkdir "$lock" 2>/dev/null; do
+    pid=$(cat "$lock/pid" 2>/dev/null)
+    if { [[ -n "$pid" ]] && ! kill -0 "$pid" 2>/dev/null; } ||
+       [[ -n $(find "$lock" -maxdepth 0 -mmin +2 2>/dev/null) ]]; then
+      rm -rf "$lock"; continue
+    fi
+    (( waited++ >= $1 )) && return 1
+    sleep 1
+  done
+  echo $$ >"$lock/pid"
+  trap 'rm -rf "$lock"' EXIT
+}
+take_lock "${VOICE_LOCK_WAIT:-30}" || exit 3
+printf '%s\t%s\t%s\n' "$(date +%T)" "$tag" "$text" >>"$state/spoken.log"
 
 kokoro_post() {  # stdin: JSON request, stdout: wav
   local cmd='curl -sf --max-time 20 -X POST http://127.0.0.1:8880/v1/audio/speech -H content-type:application/json -d @-'
@@ -25,7 +47,7 @@ kokoro_post() {  # stdin: JSON request, stdout: wav
   fi
 }
 
-wav="$state/master-line.wav"
+wav="$state/$tag-line.wav"
 if [[ "$voice" =~ ^[a-z][fm]_[a-z]+(,[a-z][fm]_[a-z]+)*$ ]] &&
    jq -n --arg t "$text" --arg v "$voice" \
      '{model:"mlx-community/Kokoro-82M-bf16", input:$t, voice:$v, response_format:"wav"}' |

@@ -1,0 +1,42 @@
+#!/bin/bash
+# cmux-voice-nudge: every three minutes, speak the top two items for you from the
+# orchestrator's board, through cmux-voice-say (same voice, same lock).
+#
+#   cmux new-split right --command ~/.local/bin/cmux-voice-nudge --focus false
+#   NUDGE_SECONDS=180                         # interval
+#   NUDGE_BOARD=~/.cache/master-board/BOARD.md
+#   touch ~/.cache/cmux-voice/nudge-mute      # silence; delete to unmute
+#   --once                                    # speak (or skip) once and exit
+# The board's "## You (top 5)" section is a numbered list; items 1 and 2 are read.
+# A tick is skipped when muted, when the list is empty, or when speech is playing.
+set -u
+state=~/.cache/cmux-voice; mkdir -p "$state"
+board=${NUDGE_BOARD:-~/.cache/master-board/BOARD.md}
+every=${NUDGE_SECONDS:-180}
+say_cmd=${VOICE_SAY:-$(dirname "$0")/cmux-voice-say}
+once=; [[ "${1:-}" == --once ]] && once=1
+
+item() {  # $1: number; prints the spoken form of that item under "## You"
+  awk -v n="$1" '/^## /{you = /^## You/} you && $0 ~ "^"n"\\. " {sub(/^[0-9]+\. /, ""); print; exit}' "$board" |
+    sed -E 's/`[^`]*`//g; s/ ?! [a-z].*$//; s/,? in [^,:]*:.*$//; s/\[([^]]*)\]\([^)]*\)/\1/g;
+            s/[*#>|]//g; s/  +/ /g; s/^ +//; s/[ ,:;]+$//'
+}
+
+echo "voice nudge: board=$board every=${every}s mute=$state/nudge-mute"
+while :; do
+  if [[ -e "$state/nudge-mute" || -e "$state/master-mute" ]]; then
+    echo "$(date +%T) muted"
+  elif ! one=$(item 1 2>/dev/null) || [[ -z "$one" ]]; then
+    echo "$(date +%T) nothing for you on the board"
+  elif pgrep -xq afplay || pgrep -xq say; then
+    echo "$(date +%T) speech playing, skipped"
+  else
+    two=$(item 2)
+    line="Next: 1, $one."; [[ -n "$two" ]] && line+=" 2, $two."
+    VOICE_TAG=nudge VOICE_LOCK_WAIT=0 "$say_cmd" "$line"
+    case $? in 0) echo "$(date +%T) $line" ;; 3) echo "$(date +%T) speech playing, skipped" ;;
+                *) echo "$(date +%T) cmux-voice-say failed" ;; esac
+  fi
+  [[ -n "$once" ]] && break
+  sleep "$every"
+done

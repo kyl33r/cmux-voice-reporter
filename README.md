@@ -53,6 +53,25 @@ cmux-voice-say "agent paging pushed; options cases now pass"
 - Each line goes to `~/.cache/cmux-voice/spoken.log` with the tag `master` in the second column, where reporter lines carry `turn_end=…`.
 - To speak only chosen headlines, mute the reporter and leave `cmux-voice-say` on.
 
+## Nudges: cmux-voice-nudge
+
+`cmux-voice-nudge` reads the top two items for you from an orchestrator's board every three minutes and speaks them: "Next: 1, Merge 2361. 2, Merge 2369."
+
+```bash
+cp bin/cmux-voice-nudge ~/.local/bin/
+cmux new-split right --command ~/.local/bin/cmux-voice-nudge --focus false
+```
+
+- It reads items 1 and 2 of the numbered list under `## You` in `NUDGE_BOARD` (default `~/.cache/master-board/BOARD.md`). Markdown, inline code, `! command` text and the `, in <pane>:` suffix are stripped.
+- `NUDGE_SECONDS` sets the interval (default 180). `--once` runs one tick and exits.
+- It speaks through `cmux-voice-say` (tag `nudge` in `spoken.log`), so it uses the same voice settings.
+- A tick is skipped when you are muted, when the list is empty, or when another line is playing.
+- Run it in its own cmux pane, not as a Claude Code background task.
+
+## One speaker at a time
+
+The reporter, `cmux-voice-say` and the nudge share a lock directory, `~/.cache/cmux-voice/speaking.lock`, that holds the speaker's pid. The reporter and `cmux-voice-say` wait up to 30 s for it (`VOICE_LOCK_WAIT` for `cmux-voice-say`). The nudge doesn't wait: it skips the tick. A lock whose pid has exited, or that is older than two minutes, is cleared.
+
 ## Muting
 
 Each speaker has its own mute file in `~/.cache/cmux-voice/`. Create the file to mute; delete it to unmute.
@@ -60,7 +79,8 @@ Each speaker has its own mute file in `~/.cache/cmux-voice/`. Create the file to
 | File | Silences |
 |---|---|
 | `mute` | per-pane announcements from `cmux-voice-reporter` |
-| `master-mute` | chosen headlines from `cmux-voice-say` |
+| `master-mute` | chosen headlines from `cmux-voice-say`, and the nudge |
+| `nudge-mute` | the nudge only |
 
 ```bash
 touch ~/.cache/cmux-voice/mute          # silence the reporter
