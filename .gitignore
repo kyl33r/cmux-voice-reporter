@@ -1,0 +1,4 @@
+*.wav
+spoken.log
+seq
+.DS_Store
