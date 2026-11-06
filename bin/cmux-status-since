@@ -1,0 +1,62 @@
+#!/bin/bash
+# cmux-status-since: print one line per Claude Code turn that ended in any cmux
+# pane since this reader's last call, using cmux's own event cursor.
+# Prints nothing when nothing is new. No speech, no AI calls.
+#
+#   cmux-status-since              # reader "master"
+#   cmux-status-since nudge        # each name keeps its own cursor
+#   15:54  api tests  The fix is pushed and CI is green.
+#
+#   STATUS_CURSOR_DIR=~/.cache/master-board   # holds .cursor-<name>
+#   STATUS_SKIP_SURFACES="<uuid> <uuid>"      # surfaces to leave out
+# A first call (no cursor yet) prints at most the last 20 retained updates.
+set -u
+name=${1:-master}
+dir=${STATUS_CURSOR_DIR:-~/.cache/master-board}; mkdir -p "$dir"
+cursor=$dir/.cursor-$name
+skip_ids=" ${STATUS_SKIP_SURFACES:-} "
+first=; [[ -s "$cursor" ]] || { echo 0 >"$cursor"; first=1; }
+
+headline() {  # first sentence, markdown stripped, capped at ~140 bytes on a word
+  sed -E 's/\[([^]]*)\]\([^)]*\)/\1/g; s/[*`#_>|]//g; s/	/ /g; s/  +/ /g; s/^ +//' <<<"$1" |
+    LC_ALL=C awk '{ if (match($0, /[.!?]( |$)/)) $0 = substr($0, 1, RSTART)
+           if (length($0) > 140) { s = substr($0, 1, 140); sub(/ [^ ]*$/, "", s); $0 = s "…" }
+           print }' |
+    iconv -c -f UTF-8 -t UTF-8 2>/dev/null  # the byte cut (here or cmux's) can split a character
+}
+
+# cmux advances the cursor after each event. A replay arrives a page (~8
+# events) per call and --timeout ends the call, so call until a page is empty.
+events=
+for _ in $(seq 100); do
+  page=$(cmux events --name notification.created --cursor-file "$cursor" \
+           --no-ack --no-heartbeat --timeout 1 2>/dev/null |
+         jq -rR 'fromjson? | select(.payload.notification_id) |
+                 [.surface_id, .payload.notification_id, .occurred_at] | @tsv')
+  [[ -z "$page" ]] && break
+  events+=$page$'\n'
+done
+events=${events%$'\n'}
+[[ -z "$events" ]] && exit 0
+[[ -n "$first" ]] && events=$(tail -n 20 <<<"$events")
+
+notes=$(cmux list-notifications 2>/dev/null)
+tree=$(cmux --id-format both tree --all --json 2>/dev/null)
+later=" "   # walk newest first, so a pane's older events know a newer one follows
+while IFS=$'\t' read -r sid nid at; do
+  [[ "$skip_ids" == *" $sid "* ]] && continue
+  # row: idx:nid|workspace|surface|state|title|subtitle|BODY (may hold '|')|ts|pct:<workspace title>
+  row=$(grep -F ":$nid|" <<<"$notes" | head -1)
+  pane=$(jq -r --arg s "$sid" 'first(.. | objects | select(.id? == $s) | .title) // empty' <<<"$tree")
+  if [[ -n "$row" ]]; then
+    rest=${row#*|*|*|*|*|*|}; workspace=${rest##*|pct:}; rest=${rest%|pct:*}
+    text=$(headline "${rest%|*}")
+  elif [[ "$later" == *" $sid "* ]]; then
+    continue   # replaced by the newer notification printed for this pane
+  else
+    workspace=; text="(text no longer in cmux)"
+  fi
+  later+="$sid "
+  when=$(date -r "$(date -j -u -f %Y-%m-%dT%H:%M:%S "${at:0:19}" +%s)" +%H:%M)
+  printf '%s\t%s\t%s\n' "$when" "${pane:-${workspace:-$sid}}" "$text"
+done < <(tail -r <<<"$events") | tail -r
