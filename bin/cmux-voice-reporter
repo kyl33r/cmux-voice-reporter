@@ -7,7 +7,7 @@
 #   VOICE=af_bella cmux-voice-reporter          # any Kokoro voice (af_heart, bf_emma,
 #                                                # blends like "af_heart,jf_alpha")
 #   VOICE=Samantha cmux-voice-reporter          # or any macOS `say` voice
-#   FALLBACK_VOICE=Samantha                      # `say` voice if Kokoro is down
+#   FALLBACK_VOICE="jf_alpha Samantha"           # tried in order if VOICE fails
 #   KOKORO_HOST=my-mini.local                    # ssh host running the Kokoro server
 #                                                # (unset: server on this machine)
 #   VOICE_SKIP_SURFACE=<uuid>                    # surface to stay silent for
@@ -16,7 +16,7 @@
 set -u
 state=~/.cache/cmux-voice; mkdir -p "$state"
 voice=${VOICE:-af_nicole}
-fallback=${FALLBACK_VOICE:-Samantha}
+fallback=${FALLBACK_VOICE:-jf_alpha Samantha}
 kokoro_host=${KOKORO_HOST:-}
 skip=${VOICE_SKIP_SURFACE:-}
 once=; [[ "${1:-}" == --once ]] && once=1
@@ -49,12 +49,12 @@ take_lock() {  # $1: seconds to wait
 }
 
 # Kokoro voices look like af_nicole / bm_george (optionally comma-blended).
-kokoro_voice() { [[ "$voice" =~ ^[a-z][fm]_[a-z]+(,[a-z][fm]_[a-z]+)*$ ]]; }
+is_kokoro() { [[ "$1" =~ ^[a-z][fm]_[a-z]+(,[a-z][fm]_[a-z]+)*$ ]]; }
 
-kokoro_wav() {  # $1: text, $2: wav path. One retry; on failure $why says why.
-  local try rc
-  for try in 1 2; do
-    jq -n --arg t "$1" --arg v "$voice" \
+kokoro_wav() {  # $1: text, $2: wav path, $3: voice, $4: tries. On failure $why and $rc say why.
+  local try
+  for (( try = 1; try <= $4; try++ )); do
+    jq -n --arg t "$1" --arg v "$3" \
       '{model:"mlx-community/Kokoro-82M-bf16", input:$t, voice:$v, response_format:"wav"}' |
       kokoro_post >"$2" 2>/dev/null
     rc=$?
@@ -68,24 +68,40 @@ kokoro_wav() {  # $1: text, $2: wav path. One retry; on failure $why says why.
       *) why="request exited $rc" ;;
     esac
   done
-  why+=", after a retry"
+  (( $4 > 1 )) && why+=", after a retry"
   return 1
 }
 
-log_fallback() {
-  printf '%s\tkokoro fallback: %s\n' "$(date +%T)" "$why" >>"$state/spoken.log"
-  echo "$(date +%T) kokoro fallback: $why"
+# Speak $1 in $voice, else in each $fallback voice in turn (Kokoro or `say`).
+# The first voice gets one retry. A server-level failure (down, unreachable,
+# timed out) skips the remaining Kokoro voices, since they would fail the same way.
+speak_chain() {  # $1: text, $2: wav path
+  local v tries=2 down= reasons=
+  for v in "$voice" $fallback; do
+    if is_kokoro "$v"; then
+      [[ -n "$down" ]] && continue
+      if kokoro_wav "$1" "$2" "$v" "$tries"; then
+        [[ -n "$reasons" ]] && log_fallback "${reasons}using $v"
+        afplay "$2"; return
+      fi
+      reasons+="$v: $why; "
+      case $rc in 7|28|255) down=1 ;; esac
+    else
+      [[ -n "$reasons" || "$v" != "$voice" ]] && log_fallback "${reasons}using $v"
+      say -v "$v" -- "$1"; return
+    fi
+    tries=1
+  done
+  log_fallback "${reasons}using Samantha"
+  say -v Samantha -- "$1"
 }
 
-speak() {
-  if kokoro_voice; then
-    kokoro_wav "$1" "$state/line.wav" && { afplay "$state/line.wav"; return; }
-    log_fallback
-    say -v "$fallback" -- "$1"
-  else
-    say -v "$voice" -- "$1"
-  fi
+log_fallback() {
+  printf '%s\tkokoro fallback: %s\n' "$(date +%T)" "$1" >>"$state/spoken.log"
+  echo "$(date +%T) kokoro fallback: $1"
 }
+
+speak() { speak_chain "$1" "$state/line.wav"; }
 
 headline() {  # first sentence, markdown stripped, capped at ~120 bytes on a word
   sed -E 's/\[([^]]*)\]\([^)]*\)/\1/g; s/[*`#_>|]//g; s/  +/ /g; s/^ +//' <<<"$1" |

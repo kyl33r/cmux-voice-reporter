@@ -59,6 +59,15 @@ cmux new-split right --command ~/.local/bin/cmux-voice-reporter --focus false
 
 Only the first download needs the internet. After that everything runs offline.
 
+**Japanese text (optional).** Japanese voices (`jf_*`, `jm_*`) read English text through the English pipeline. To have them read Japanese text, add the Japanese text tools and the UniDic dictionary (about 780 MB) on the server Mac:
+
+```bash
+uv pip install --python ~/.local/share/uv/tools/mlx-audio/bin/python "misaki[ja]"
+~/.local/share/uv/tools/mlx-audio/bin/python -m unidic download
+```
+
+Then send `"lang_code": "j"` with the request. The running server picks this up without a restart.
+
 **Memory.** Measured on a 32 GB M-series Mac running the server for a day: the server's memory footprint is about 750 MB once the model is loaded (167 MB resident; the rest is unified GPU memory). A headline takes about 0.8 s. Its recorded peak that day was about 9.6 GB; the cause is not confirmed (possibly larger models tried from the voice skill). A restart returns it to the steady size. The clients (`cmux-voice-reporter` and the rest) are small bash scripts plus `afplay`.
 
 ## Options (environment)
@@ -66,7 +75,7 @@ Only the first download needs the internet. After that everything runs offline.
 | Variable | Default | Meaning |
 |---|---|---|
 | `VOICE` | `af_nicole` | Kokoro voice (`af_heart`, `af_bella`, `bf_emma`, `bm_george`, …, or a blend `"af_heart,jf_alpha"`), or any macOS `say` voice name |
-| `FALLBACK_VOICE` | `Samantha` | `say` voice used when Kokoro fails. A Kokoro request may take up to 60 s and is retried once before falling back. Each fallback writes `kokoro fallback: <reason>` to `spoken.log`. |
+| `FALLBACK_VOICE` | `jf_alpha Samantha` | Voices tried in order when `VOICE` fails, Kokoro or `say`. `VOICE` gets up to 60 s and one retry. A server-level failure (down, unreachable, timed out) skips the remaining Kokoro voices and goes straight to the first `say` voice. Each fallback writes `kokoro fallback: <reason>; using <voice>` to `spoken.log`. |
 | `KOKORO_HOST` | unset | ssh host running the server; unset means the server is on this machine |
 | `VOICE_SKIP_SURFACE` | unset | cmux surface UUID to stay silent for, such as an orchestrator pane |
 | `VOICE_ONLY_SURFACE` | unset | speak only for this surface (testing) |
