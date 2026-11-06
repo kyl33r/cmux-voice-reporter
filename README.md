@@ -34,9 +34,22 @@ Shared by all of them:
 
 ```bash
 cp bin/cmux-voice-reporter ~/.local/bin/
-# Kokoro server, on this Mac or another one you can ssh to:
-kokoro-server/install.sh            # or --launchd to keep it running
+# TTS server, on this Mac or another one you can ssh to:
+kokoro-server/install.sh            # asks about Qwen; --qwen / --no-qwen to decide up front,
+                                    # --launchd to keep the server running
 ```
+
+> **Footprint, before you install.** Everything runs on the server Mac.
+>
+> | Part | Disk | Memory while the server runs | Required? |
+> |---|---|---|---|
+> | Kokoro-82M + mlx-audio tools | ~1.6 GB | ~0.75 GB | yes |
+> | Qwen3-TTS 0.6B (the breathy default voice) | +4.7 GB | grows to ~3.5 GB once a Qwen line is spoken (5 GB+ seen), until the server restarts | no: `install.sh` asks first |
+> | Japanese text support (optional, see below) | +0.8 GB | small | no |
+>
+> On a Mac that is short of memory or already runs heavy jobs, answer no to Qwen. The clients then fall back to Kokoro `af_nicole` on each line, because the server reports the voice clip missing straight away and downloads nothing. Set `VOICE=af_nicole` on the clients to skip that attempt.
+
+Long lines are spoken a sentence at a time. Each sentence is generated while the one before it plays, so every request stays well under `QWEN_TIMEOUT` and speech starts sooner.
 
 The `say` fallback voice, Samantha (US English), ships with macOS. To use another, set `FALLBACK_VOICE` to any name from `say -v '?'`; extra voices download from System Settings → Accessibility → Spoken Content → System Voice → Manage Voices.
 
