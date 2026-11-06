@@ -59,6 +59,26 @@ Run the reporter in its own cmux pane:
 cmux new-split right --command ~/.local/bin/cmux-voice-reporter --focus false
 ```
 
+## Voice previews
+
+Each pinned voice says the same line in `samples/`, so you can pick one by ear: "Hi, I'm <name>. The build finished and all tests passed. Ready when you are."
+
+| Preview | `VOICE=` | Sound | Engine |
+|---|---|---|---|
+| [1-qwen-airy.m4a](samples/1-qwen-airy.m4a) | `qwen:airy` (default) | soft, breathy, airy | Qwen3-TTS (optional install) |
+| [2-qwen-whisper.m4a](samples/2-qwen-whisper.m4a) | `qwen:whisper` | gentle, whispery, warm | Qwen3-TTS (optional install) |
+| [3-qwen-airy-jp.m4a](samples/3-qwen-airy-jp.m4a) | `qwen:airy-jp` | soft and airy, light Japanese accent | Qwen3-TTS (optional install) |
+| [4-kokoro-nicole.m4a](samples/4-kokoro-nicole.m4a) | `af_nicole` | soft, close, whispery | Kokoro (first fallback) |
+| [5-kokoro-alpha.m4a](samples/5-kokoro-alpha.m4a) | `jf_alpha` | light Japanese voice reading English | Kokoro (second fallback) |
+
+```bash
+afplay samples/1-qwen-airy.m4a                       # play one on a Mac
+for f in samples/*.m4a; do echo "$f"; afplay "$f"; done   # play them all, in order
+say -v Samantha "The build finished and all tests passed."  # the last fallback, built into macOS
+```
+
+On GitHub, open a preview and choose **View raw** to play or download it. To use a voice, start the reporter with it, for example `VOICE=qwen:whisper ~/.local/bin/cmux-voice-reporter`, or change the `voice=${VOICE:-…}` default in your installed copy.
+
 ## Voice models: where they come from
 
 The default voice, `qwen:airy`, is a soft, breathy female voice. Qwen3-TTS clones it from a short reference clip, so every line sounds the same. Two more clips are pinned: `qwen:whisper` (whispery, warm) and `qwen:airy-jp` (airy, with a light Japanese accent). To add one, design or record a clip you have the rights to, put it in `voices/<name>.wav`, copy it to the server, and use `VOICE=qwen:<name>`.
