@@ -4,10 +4,13 @@
 # Run it in its own cmux pane, never as a Claude background task: a tracked
 # task stops its owner's Stop hook from firing.
 #
+#   VOICE=qwen:airy (default)                    # Qwen3-TTS clone of voices/airy.wav;
+#                                                # also qwen:whisper, qwen:airy-jp
 #   VOICE=af_bella cmux-voice-reporter          # any Kokoro voice (af_heart, bf_emma,
 #                                                # blends like "af_heart,jf_alpha")
 #   VOICE=Samantha cmux-voice-reporter          # or any macOS `say` voice
-#   FALLBACK_VOICE="jf_alpha Samantha"           # tried in order if VOICE fails
+#   FALLBACK_VOICE="af_nicole jf_alpha Samantha" # tried in order if VOICE fails
+#   QWEN_TIMEOUT=15  QWEN_VOICE_DIR=<dir on the server>  QWEN_MODEL=<repo id>
 #   KOKORO_HOST=my-mini.local                    # ssh host running the Kokoro server
 #                                                # (unset: server on this machine)
 #   VOICE_SKIP_SURFACE=<uuid>                    # surface to stay silent for
@@ -15,22 +18,17 @@
 #   --once                                       # exit after first spoken line
 set -u
 state=~/.cache/cmux-voice; mkdir -p "$state"
-voice=${VOICE:-af_nicole}
-fallback=${FALLBACK_VOICE:-jf_alpha Samantha}
+voice=${VOICE:-qwen:airy}
+fallback=${FALLBACK_VOICE:-af_nicole jf_alpha Samantha}
 kokoro_host=${KOKORO_HOST:-}
+qwen_model=${QWEN_MODEL:-mlx-community/Qwen3-TTS-12Hz-0.6B-Base-bf16}
+qwen_dir=${QWEN_VOICE_DIR:-$HOME/.local/share/cmux-voice/voices}   # path on the server
+qwen_timeout=${QWEN_TIMEOUT:-15}
 skip=${VOICE_SKIP_SURFACE:-}
 once=; [[ "${1:-}" == --once ]] && once=1
 
 now_ms() { perl -MTime::HiRes=time -e 'printf "%.3f", time'; }
 
-kokoro_post() {  # stdin: JSON request, stdout: wav
-  local cmd='curl -sf --max-time 60 -X POST http://127.0.0.1:8880/v1/audio/speech -H content-type:application/json -d @-'
-  if [[ -n "$kokoro_host" ]]; then
-    ssh -o BatchMode=yes -o ConnectTimeout=3 "$kokoro_host" "$cmd"
-  else
-    eval "$cmd"
-  fi
-}
 
 # One speaker at a time across the reporter, cmux-voice-say and the nudge.
 lock=$state/speaking.lock
@@ -48,22 +46,41 @@ take_lock() {  # $1: seconds to wait
   echo $$ >"$lock/pid"
 }
 
-# Kokoro voices look like af_nicole / bm_george (optionally comma-blended).
+# Voices: "qwen:<name>" clones $qwen_dir/<name>.wav (on the server) with
+# Qwen3-TTS; af_nicole / bm_george style names (optionally comma-blended) are
+# Kokoro; anything else is a macOS `say` voice.
 is_kokoro() { [[ "$1" =~ ^[a-z][fm]_[a-z]+(,[a-z][fm]_[a-z]+)*$ ]]; }
+engine() { if [[ "$1" == qwen:* ]]; then echo qwen; elif is_kokoro "$1"; then echo kokoro; else echo say; fi; }
 
-kokoro_wav() {  # $1: text, $2: wav path, $3: voice, $4: tries. On failure $why and $rc say why.
-  local try
+tts_post() {  # $1: max seconds; stdin: JSON request, stdout: wav
+  local cmd="curl -sf --max-time $1 -X POST http://127.0.0.1:8880/v1/audio/speech -H content-type:application/json -d @-"
+  if [[ -n "$kokoro_host" ]]; then
+    ssh -o BatchMode=yes -o ConnectTimeout=3 "$kokoro_host" "$cmd"
+  else
+    eval "$cmd"
+  fi
+}
+
+tts_wav() {  # $1: text, $2: wav path, $3: voice, $4: tries. On failure $why and $rc say why.
+  local try req limit
+  if [[ "$3" == qwen:* ]]; then
+    limit=$qwen_timeout
+    req=$(jq -n --arg t "$1" --arg m "$qwen_model" --arg r "$qwen_dir/${3#qwen:}.wav" \
+      '{model:$m, input:$t, ref_audio:$r, response_format:"wav"}')
+  else
+    limit=60
+    req=$(jq -n --arg t "$1" --arg v "$3" \
+      '{model:"mlx-community/Kokoro-82M-bf16", input:$t, voice:$v, response_format:"wav"}')
+  fi
   for (( try = 1; try <= $4; try++ )); do
-    jq -n --arg t "$1" --arg v "$3" \
-      '{model:"mlx-community/Kokoro-82M-bf16", input:$t, voice:$v, response_format:"wav"}' |
-      kokoro_post >"$2" 2>/dev/null
+    tts_post "$limit" <<<"$req" >"$2" 2>/dev/null
     rc=$?
     [[ $rc -eq 0 && -s "$2" ]] && return 0
     case $rc in
       0) why="empty audio" ;;
       7) why="server not listening on 8880" ;;
       22) why="server returned an HTTP error" ;;
-      28) why="no reply within 60 s" ;;
+      28) why="no reply within $limit s" ;;
       255) why="ssh to $kokoro_host failed" ;;
       *) why="request exited $rc" ;;
     esac
@@ -72,25 +89,27 @@ kokoro_wav() {  # $1: text, $2: wav path, $3: voice, $4: tries. On failure $why 
   return 1
 }
 
-# Speak $1 in $voice, else in each $fallback voice in turn (Kokoro or `say`).
-# The first voice gets one retry. A server-level failure (down, unreachable,
-# timed out) skips the remaining Kokoro voices, since they would fail the same way.
+# Speak $1 in $voice, else in each $fallback voice in turn. A Kokoro first voice
+# gets one retry; Qwen gets one try within $qwen_timeout. After a failure the
+# rest of that engine is skipped, and an unreachable server skips both engines.
 speak_chain() {  # $1: text, $2: wav path
-  local v tries=2 down= reasons=
+  local v e tries skip=" " reasons= first=1
   for v in "$voice" $fallback; do
-    if is_kokoro "$v"; then
-      [[ -n "$down" ]] && continue
-      if kokoro_wav "$1" "$2" "$v" "$tries"; then
-        [[ -n "$reasons" ]] && log_fallback "${reasons}using $v"
-        afplay "$2"; return
-      fi
-      reasons+="$v: $why; "
-      case $rc in 7|28|255) down=1 ;; esac
-    else
-      [[ -n "$reasons" || "$v" != "$voice" ]] && log_fallback "${reasons}using $v"
+    e=$(engine "$v")
+    [[ "$skip" == *" $e "* ]] && continue
+    if [[ "$e" == say ]]; then
+      [[ -n "$reasons" ]] && log_fallback "${reasons}using $v"
       say -v "$v" -- "$1"; return
     fi
-    tries=1
+    tries=1; [[ -n "$first" && "$e" == kokoro ]] && tries=2
+    if tts_wav "$1" "$2" "$v" "$tries"; then
+      [[ -n "$reasons" ]] && log_fallback "${reasons}using $v"
+      afplay "$2"; return
+    fi
+    reasons+="$v: $why; "
+    skip+="$e "
+    case $rc in 7|255) skip+="kokoro qwen " ;; esac
+    first=
   done
   log_fallback "${reasons}using Samantha"
   say -v Samantha -- "$1"
