@@ -1,7 +1,7 @@
 #!/bin/bash
 # Install Kokoro-82M (via mlx-audio) as a localhost-only TTS server on an
 # Apple Silicon Mac. Run on the machine that will host the server.
-#   ./install.sh            install the tool, warm the model
+#   ./install.sh            install the tool, download and test the model
 #   ./install.sh --launchd  also install a launchd agent (start at login, keep alive)
 set -euo pipefail
 export PATH="$HOME/.local/bin:$PATH"
@@ -13,6 +13,16 @@ uv tool install --python 3.12 --force mlx-audio \
   --with "misaki[en]" --with num2words --with spacy \
   --with "en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl" \
   --with uvicorn --with fastapi --with python-multipart --with webrtcvad-wheels
+
+# The model (~340 MB: 312 MB weights + 54 voices) comes from Hugging Face on
+# first use, into ~/.cache/huggingface/hub/. Fetch it now with one test line,
+# so the first real headline isn't a slow download.
+echo "downloading mlx-community/Kokoro-82M-bf16 and speaking a test line..."
+tmp=$(mktemp -d)
+mlx_audio.tts.generate --model mlx-community/Kokoro-82M-bf16 --voice af_nicole --lang_code a \
+  --text "Kokoro is ready." --output_path "$tmp" --file_prefix warm --audio_format wav >/dev/null
+[[ -s "$tmp/warm_000.wav" ]] && echo "model ready" || { echo "test line failed" >&2; exit 1; }
+rm -rf "$tmp"
 
 mkdir -p "$HOME/Library/Logs/kokoro"
 if [[ "${1:-}" == --launchd ]]; then

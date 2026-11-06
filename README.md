@@ -38,11 +38,28 @@ cp bin/cmux-voice-reporter ~/.local/bin/
 kokoro-server/install.sh            # or --launchd to keep it running
 ```
 
+On the Mac that speaks, download the `say` fallback voice once: System Settings → Accessibility → Spoken Content → System Voice → Manage Voices → Chinese (China mainland) → Tingting. Or set `FALLBACK_VOICE` to a voice you already have (`say -v '?'` lists them).
+
 Run the reporter in its own cmux pane:
 
 ```bash
 cmux new-split right --command ~/.local/bin/cmux-voice-reporter --focus false
 ```
+
+## Voice models: where they come from
+
+| What | Where it comes from | Size | When it downloads |
+|---|---|---|---|
+| Kokoro-82M weights (`kokoro-v1_0.safetensors`) | Hugging Face, [`mlx-community/Kokoro-82M-bf16`](https://huggingface.co/mlx-community/Kokoro-82M-bf16) | 312 MB | `install.sh` speaks one test line, which fetches it into `~/.cache/huggingface/hub/` on the server Mac |
+| The 54 Kokoro voices (`voices/*.safetensors`, `af_nicole` and the rest) | the same Hugging Face repo | 27 MB (about 0.5 MB each) | together with the weights; switching voices downloads nothing |
+| mlx-audio and its Python dependencies | PyPI, through `uv tool install` in `install.sh` | about 1.2 GB in `~/.local/share/uv/tools/mlx-audio` | `install.sh` |
+| spaCy `en_core_web_sm` (English text processing) | GitHub release wheel, pinned in `install.sh` | about 15 MB | `install.sh` |
+| macOS `say` voices, such as the Tingting fallback | Apple, through System Settings → Accessibility → Spoken Content → Manage Voices | varies | when you pick one; there's no command-line install |
+| Other mlx-audio models | Hugging Face, by repo id | varies | on first `mlx_audio.tts.generate --model <repo>`; see `skills/installing-tts-voices` |
+
+Only the first download needs the internet. After that everything runs offline.
+
+**Memory.** Measured on a 32 GB M-series Mac running the server for a day: the server's memory footprint is about 750 MB once the model is loaded (167 MB resident; the rest is unified GPU memory). A headline takes about 0.8 s. Its recorded peak that day was about 9.6 GB; the cause is not confirmed (possibly larger models tried from the voice skill). A restart returns it to the steady size. The clients (`cmux-voice-reporter` and the rest) are small bash scripts plus `afplay`.
 
 ## Options (environment)
 
