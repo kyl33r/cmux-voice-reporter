@@ -55,7 +55,10 @@ engine() { if [[ "$1" == qwen:* ]]; then echo qwen; elif is_kokoro "$1"; then ec
 tts_post() {  # $1: max seconds; stdin: JSON request, stdout: wav
   local cmd="curl -sf --max-time $1 -X POST http://127.0.0.1:8880/v1/audio/speech -H content-type:application/json -d @-"
   if [[ -n "$kokoro_host" ]]; then
-    ssh -o BatchMode=yes -o ConnectTimeout=3 "$kokoro_host" "$cmd"
+    # curl's limit doesn't cover ssh login, which crawls on a swapping server;
+    # alarm bounds the whole call (exit 142 counts as a timeout below).
+    perl -e 'alarm shift; exec @ARGV' $(( $1 + 5 )) \
+      ssh -o BatchMode=yes -o ConnectTimeout=3 "$kokoro_host" "$cmd"
   else
     eval "$cmd"
   fi
@@ -80,7 +83,7 @@ tts_wav() {  # $1: text, $2: wav path, $3: voice, $4: tries. On failure $why and
       0) why="empty audio" ;;
       7) why="server not listening on 8880" ;;
       22) why="server returned an HTTP error" ;;
-      28) why="no reply within $limit s" ;;
+      28|142) why="no reply within $limit s" ;;
       255) why="ssh to $kokoro_host failed" ;;
       *) why="request exited $rc" ;;
     esac
@@ -89,22 +92,23 @@ tts_wav() {  # $1: text, $2: wav path, $3: voice, $4: tries. On failure $why and
   return 1
 }
 
-# Speak $1 in $voice, else in each $fallback voice in turn. A Kokoro first voice
-# gets one retry; Qwen gets one try within $qwen_timeout. After a failure the
-# rest of that engine is skipped, and an unreachable server skips both engines.
-speak_chain() {  # $1: text, $2: wav path
-  local v e tries skip=" " reasons= first=1
+# Synthesize $1 into $2 with $voice, else each $fallback voice in turn. Returns 0
+# with the wav ready, or 1 with $say_voice set for a `say` voice. A Kokoro first
+# voice gets one retry; Qwen gets one try within $qwen_timeout. A failed engine
+# joins $skip for the rest of the line; an unreachable server skips both engines.
+synth_chain() {  # $1: text, $2: wav path
+  local v e tries reasons= first=1
   for v in "$voice" $fallback; do
     e=$(engine "$v")
     [[ "$skip" == *" $e "* ]] && continue
     if [[ "$e" == say ]]; then
       [[ -n "$reasons" ]] && log_fallback "${reasons}using $v"
-      say -v "$v" -- "$1"; return
+      say_voice=$v; return 1
     fi
     tries=1; [[ -n "$first" && "$e" == kokoro ]] && tries=2
     if tts_wav "$1" "$2" "$v" "$tries"; then
       [[ -n "$reasons" ]] && log_fallback "${reasons}using $v"
-      afplay "$2"; return
+      return 0
     fi
     reasons+="$v: $why; "
     skip+="$e "
@@ -112,7 +116,41 @@ speak_chain() {  # $1: text, $2: wav path
     first=
   done
   log_fallback "${reasons}using Samantha"
-  say -v Samantha -- "$1"
+  say_voice=Samantha; return 1
+}
+
+chunks() {  # one line per sentence; tiny ones merged, ones over ~25 words cut at a comma
+  perl -CSD -e '
+    my $t = join " ", <STDIN>; $t =~ s/\s+/ /g; $t =~ s/^ | $//g;
+    my @out; my $cur = "";
+    for my $s (split /(?<=[.!?;:])\s+/, $t) {
+      my @parts = ($s);
+      if (split(/ /, $s) > 25) { @parts = split /(?<=,)\s+/, $s }
+      for my $p (@parts) {
+        if ($cur ne "" && split(/ /, "$cur $p") > 25 && split(/ /, $cur) >= 4) { push @out, $cur; $cur = $p }
+        else { $cur = $cur eq "" ? $p : "$cur $p" }
+      }
+    }
+    push @out, $cur if $cur ne "";
+    print "$_\n" for @out;' <<<"$1"
+}
+
+# Speak $1 a sentence at a time: synthesize the next chunk while the current one
+# plays, so long lines stay inside the Qwen limit and start sooner.
+speak_text() {  # $1: text, $2: wav path prefix
+  local chunk i=0 player= skip=" " say_voice
+  while IFS= read -r chunk; do
+    i=$((i + 1))
+    if synth_chain "$chunk" "$2.$i.wav"; then
+      [[ -n "$player" ]] && wait "$player"
+      afplay "$2.$i.wav" & player=$!
+    else
+      [[ -n "$player" ]] && wait "$player"; player=
+      say -v "$say_voice" -- "$chunk"
+    fi
+  done < <(chunks "$1")
+  [[ -n "$player" ]] && wait "$player"
+  rm -f "$2".*.wav
 }
 
 log_fallback() {
@@ -120,7 +158,7 @@ log_fallback() {
   echo "$(date +%T) kokoro fallback: $1"
 }
 
-speak() { speak_chain "$1" "$state/line.wav"; }
+speak() { speak_text "$1" "$state/line"; }
 
 headline() {  # first sentence, markdown stripped, capped at ~120 bytes on a word
   sed -E 's/\[([^]]*)\]\([^)]*\)/\1/g; s/[*`#_>|]//g; s/  +/ /g; s/^ +//' <<<"$1" |
