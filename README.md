@@ -13,7 +13,7 @@ One speaker for all panes. Child sessions never speak. A single process reads cm
 | `cmux-voice-reporter` | Speaks "<pane> finished: <first sentence>" each time a Claude Code turn ends in any cmux pane. | yes |
 | `cmux-voice-say` | Speaks one headline you choose, in the same voice. Made for an orchestrator session that reads out only the reports that matter. | yes |
 | `cmux-voice-nudge` | Every 3 minutes, speaks the top two items for you from an orchestrator's board file: "Next: 1, … 2, …". | yes |
-| `cmux-status-feed` | Keeps a live markdown table of what every pane last said (pane, time, headline), newest first, for a cmux markdown viewer. | no |
+| `cmux-status-since` | Prints only the pane updates since your last call, one line each (time, pane, headline). Made for an orchestrator that wants new reports without rereading everything. | no |
 
 Shared by all of them:
 
@@ -89,24 +89,24 @@ cmux new-split right --command ~/.local/bin/cmux-voice-nudge --focus false
 
 The reporter, `cmux-voice-say` and the nudge share a lock directory, `~/.cache/cmux-voice/speaking.lock`, that holds the speaker's pid. The reporter and `cmux-voice-say` wait up to 30 s for it (`VOICE_LOCK_WAIT` for `cmux-voice-say`). The nudge doesn't wait: it skips the tick. A lock whose pid has exited, or that is older than two minutes, is cleared.
 
-## Status feed: cmux-status-feed
+## Incremental updates: cmux-status-since
 
-`cmux-status-feed` keeps one row per pane, with the newest first, in `~/.cache/master-board/live.md`, and rewrites the file atomically. Open it in a cmux markdown viewer for a live dashboard of every session.
+`cmux-status-since` prints one line per Claude Code turn that ended in any pane since the last call, then exits. It prints nothing when nothing is new.
 
 ```bash
-cp bin/cmux-status-feed ~/.local/bin/
-cmux new-split right --command ~/.local/bin/cmux-status-feed --focus false
-cmux markdown open ~/.cache/master-board/live.md
+cp bin/cmux-status-since ~/.local/bin/
+cmux-status-since            # reader "master"
+cmux-status-since nudge      # another reader, with its own cursor
 ```
 
-| Pane | Last update | Headline |
-|---|---|---|
-| api tests | 15:54 | The fix is pushed and CI is green. |
-| eval cases | Nov 5 13:06 (quiet) | I've proven the clean-history rewrite on a local ref. |
+```
+16:19	docs site	The new install guide is ready for review.
+16:20	release prep	The tag is pushed and the build is green.
+```
 
-- On start it seeds the table from `cmux list-notifications`, so it isn't empty. After that it follows the same `notification.created` events as the reporter, with its own cursor file in `~/.cache/cmux-status-feed/`.
-- Pane titles are read fresh from `cmux tree` at each rewrite, so renames show up and closed panes drop out. The table is rewritten at least once a minute, so rows older than `STATUS_QUIET_MINUTES` (default 30) are marked `(quiet)` on time.
-- `STATUS_FILE` sets the output path. `STATUS_SKIP_SURFACES` (space-separated UUIDs) and `STATUS_SKIP_TITLES` (a regex; the default skips the voice and feed panes) leave panes out.
+- It uses cmux's own event cursor, `~/.cache/master-board/.cursor-<name>` (`STATUS_CURSOR_DIR` changes the folder), so it needs no other process running. A first call prints at most the last 20 updates.
+- The pane title comes from `cmux tree` and the headline from `cmux list-notifications`. cmux keeps only queued notifications. When one was already dismissed or replaced, the line says `(text no longer in cmux)`; call it often to keep the text.
+- `STATUS_SKIP_SURFACES` (space-separated UUIDs) leaves panes out, such as the caller's own.
 - It doesn't speak, doesn't call any model, and reads nothing but cmux.
 
 ## Muting
