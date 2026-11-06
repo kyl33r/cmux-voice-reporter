@@ -38,7 +38,7 @@ cp bin/cmux-voice-reporter ~/.local/bin/
 kokoro-server/install.sh            # or --launchd to keep it running
 ```
 
-On the Mac that speaks, download the `say` fallback voice once: System Settings → Accessibility → Spoken Content → System Voice → Manage Voices → Chinese (China mainland) → Tingting. Or set `FALLBACK_VOICE` to a voice you already have (`say -v '?'` lists them).
+The `say` fallback voice, Samantha (US English), ships with macOS. To use another, set `FALLBACK_VOICE` to any name from `say -v '?'`; extra voices download from System Settings → Accessibility → Spoken Content → System Voice → Manage Voices.
 
 Run the reporter in its own cmux pane:
 
@@ -54,7 +54,7 @@ cmux new-split right --command ~/.local/bin/cmux-voice-reporter --focus false
 | The 54 Kokoro voices (`voices/*.safetensors`, `af_nicole` and the rest) | the same Hugging Face repo | 27 MB (about 0.5 MB each) | together with the weights; switching voices downloads nothing |
 | mlx-audio and its Python dependencies | PyPI, through `uv tool install` in `install.sh` | about 1.2 GB in `~/.local/share/uv/tools/mlx-audio` | `install.sh` |
 | spaCy `en_core_web_sm` (English text processing) | GitHub release wheel, pinned in `install.sh` | about 15 MB | `install.sh` |
-| macOS `say` voices, such as the Tingting fallback | Apple, through System Settings → Accessibility → Spoken Content → Manage Voices | varies | when you pick one; there's no command-line install |
+| macOS `say` voices, such as the Samantha fallback | Apple, through System Settings → Accessibility → Spoken Content → Manage Voices | varies | when you pick one; there's no command-line install |
 | Other mlx-audio models | Hugging Face, by repo id | varies | on first `mlx_audio.tts.generate --model <repo>`; see `skills/installing-tts-voices` |
 
 Only the first download needs the internet. After that everything runs offline.
@@ -66,7 +66,7 @@ Only the first download needs the internet. After that everything runs offline.
 | Variable | Default | Meaning |
 |---|---|---|
 | `VOICE` | `af_nicole` | Kokoro voice (`af_heart`, `af_bella`, `bf_emma`, `bm_george`, …, or a blend `"af_heart,jf_alpha"`), or any macOS `say` voice name |
-| `FALLBACK_VOICE` | `Tingting` | `say` voice used when Kokoro is unreachable |
+| `FALLBACK_VOICE` | `Samantha` | `say` voice used when Kokoro fails. A Kokoro request may take up to 60 s and is retried once before falling back. Each fallback writes `kokoro fallback: <reason>` to `spoken.log`. |
 | `KOKORO_HOST` | unset | ssh host running the server; unset means the server is on this machine |
 | `VOICE_SKIP_SURFACE` | unset | cmux surface UUID to stay silent for, such as an orchestrator pane |
 | `VOICE_ONLY_SURFACE` | unset | speak only for this surface (testing) |
