@@ -17,7 +17,7 @@ One speaker for all panes. Child sessions never speak. A single process reads cm
 
 Shared by all of them:
 
-- **Local, free voice.** Kokoro-82M on an Apple Silicon Mac (this one or one you reach over ssh), with macOS `say` as the fallback. No API keys, no cloud calls, no AI summarizing.
+- **Local, free voice.** A breathy Qwen3-TTS voice by default, with Kokoro-82M and then macOS `say` as fallbacks, all on an Apple Silicon Mac (this one or one you reach over ssh). No API keys, no cloud calls, no AI summarizing.
 - **One line at a time.** The three speakers share a lock, so lines never overlap.
 - **Separate mute files.** Mute the per-pane announcements, the chosen headlines and the nudges on their own.
 - **Read-only toward your sessions.** Everything reads cmux's existing turn-end events and notifications. Nothing types into a pane or changes a session's config.
@@ -48,8 +48,12 @@ cmux new-split right --command ~/.local/bin/cmux-voice-reporter --focus false
 
 ## Voice models: where they come from
 
+The default voice, `qwen:airy`, is a soft, breathy female voice. Qwen3-TTS clones it from a short reference clip, so every line sounds the same. Two more clips are pinned: `qwen:whisper` (whispery, warm) and `qwen:airy-jp` (airy, with a light Japanese accent). To add one, design or record a clip you have the rights to, put it in `voices/<name>.wav`, copy it to the server, and use `VOICE=qwen:<name>`.
+
 | What | Where it comes from | Size | When it downloads |
 |---|---|---|---|
+| Qwen3-TTS 0.6B Base (the default voice) | Hugging Face, [`mlx-community/Qwen3-TTS-12Hz-0.6B-Base-bf16`](https://huggingface.co/mlx-community/Qwen3-TTS-12Hz-0.6B-Base-bf16) | 4.7 GB | `install.sh` clones one test line |
+| Reference clips (`voices/airy.wav`, `whisper.wav`, `airy-jp.wav`) | this repo; each was designed once with Qwen3-TTS 1.7B VoiceDesign from a text description | about 0.7 MB in all | copied to the server by `install.sh` |
 | Kokoro-82M weights (`kokoro-v1_0.safetensors`) | Hugging Face, [`mlx-community/Kokoro-82M-bf16`](https://huggingface.co/mlx-community/Kokoro-82M-bf16) | 312 MB | `install.sh` speaks one test line, which fetches it into `~/.cache/huggingface/hub/` on the server Mac |
 | The 54 Kokoro voices (`voices/*.safetensors`, `af_nicole` and the rest) | the same Hugging Face repo | 27 MB (about 0.5 MB each) | together with the weights; switching voices downloads nothing |
 | mlx-audio and its Python dependencies | PyPI, through `uv tool install` in `install.sh` | about 1.2 GB in `~/.local/share/uv/tools/mlx-audio` | `install.sh` |
@@ -68,14 +72,17 @@ uv pip install --python ~/.local/share/uv/tools/mlx-audio/bin/python "misaki[ja]
 
 Then send `"lang_code": "j"` with the request. The running server picks this up without a restart.
 
-**Memory.** Measured on a 32 GB M-series Mac running the server for a day: the server's memory footprint is about 750 MB once the model is loaded (167 MB resident; the rest is unified GPU memory). A headline takes about 0.8 s. Its recorded peak that day was about 9.6 GB; the cause is not confirmed (possibly larger models tried from the voice skill). A restart returns it to the steady size. The clients (`cmux-voice-reporter` and the rest) are small bash scripts plus `afplay`.
+**Memory.** Measured on a 32 GB M-series Mac. Kokoro alone: the server's footprint is about 0.75 GB, and a line takes about 0.8 s. With Qwen3-TTS 0.6B also loaded: about 3.5 GB steady and 5.2 GB after first use, and a line takes 1–3 s. `DELETE /v1/models?model_name=<repo id>` unloads a model, but MLX keeps its freed buffers cached (about 3.3 GB stays). Only restarting the server returns it to Kokoro's 0.75 GB. Designing a new voice with the 1.7B VoiceDesign model peaked at 6.8 GB in a one-off process.
 
 ## Options (environment)
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `VOICE` | `af_nicole` | Kokoro voice (`af_heart`, `af_bella`, `bf_emma`, `bm_george`, …, or a blend `"af_heart,jf_alpha"`), or any macOS `say` voice name |
-| `FALLBACK_VOICE` | `jf_alpha Samantha` | Voices tried in order when `VOICE` fails, Kokoro or `say`. `VOICE` gets up to 60 s and one retry. A server-level failure (down, unreachable, timed out) skips the remaining Kokoro voices and goes straight to the first `say` voice. Each fallback writes `kokoro fallback: <reason>; using <voice>` to `spoken.log`. |
+| `VOICE` | `qwen:airy` | `qwen:<name>` clones `voices/<name>.wav` with Qwen3-TTS (`qwen:airy`, `qwen:whisper`, `qwen:airy-jp`); a Kokoro voice (`af_nicole`, `bf_emma`, …, or a blend `"af_heart,jf_alpha"`); or any macOS `say` voice name |
+| `FALLBACK_VOICE` | `af_nicole jf_alpha Samantha` | Voices tried in order when `VOICE` fails. A Qwen line gets one try within `QWEN_TIMEOUT`; a Kokoro first voice gets up to 60 s and one retry. After a failure the rest of that engine is skipped, and an unreachable server skips straight to the first `say` voice. Each fallback writes `kokoro fallback: <reason>; using <voice>` to `spoken.log`. |
+| `QWEN_TIMEOUT` | `15` | seconds a Qwen line may take before the line falls back |
+| `QWEN_VOICE_DIR` | `~/.local/share/cmux-voice/voices` | folder of reference clips on the server (`install.sh` copies `voices/` there) |
+| `QWEN_MODEL` | `mlx-community/Qwen3-TTS-12Hz-0.6B-Base-bf16` | Qwen3-TTS model used for cloning |
 | `KOKORO_HOST` | unset | ssh host running the server; unset means the server is on this machine |
 | `VOICE_SKIP_SURFACE` | unset | cmux surface UUID to stay silent for, such as an orchestrator pane |
 | `VOICE_ONLY_SURFACE` | unset | speak only for this surface (testing) |

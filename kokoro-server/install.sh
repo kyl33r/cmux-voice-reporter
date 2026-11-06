@@ -22,6 +22,16 @@ tmp=$(mktemp -d)
 mlx_audio.tts.generate --model mlx-community/Kokoro-82M-bf16 --voice af_nicole --lang_code a \
   --text "Kokoro is ready." --output_path "$tmp" --file_prefix warm --audio_format wav >/dev/null
 [[ -s "$tmp/warm_000.wav" ]] && echo "model ready" || { echo "test line failed" >&2; exit 1; }
+
+# Qwen3-TTS (the default voice, qwen:airy) clones the reference clips in voices/.
+# The 0.6B Base model (4.7 GB on disk) also comes from Hugging Face on first use.
+mkdir -p "$HOME/.local/share/cmux-voice/voices"
+cp "$(dirname "$0")"/../voices/*.wav "$HOME/.local/share/cmux-voice/voices/"
+echo "downloading mlx-community/Qwen3-TTS-12Hz-0.6B-Base-bf16 and cloning a test line..."
+mlx_audio.tts.generate --model mlx-community/Qwen3-TTS-12Hz-0.6B-Base-bf16 \
+  --ref_audio "$HOME/.local/share/cmux-voice/voices/airy.wav" \
+  --text "Qwen is ready." --output_path "$tmp" --file_prefix qwen --audio_format wav >/dev/null
+ls "$tmp"/qwen_*.wav >/dev/null 2>&1 && echo "qwen ready" || { echo "qwen test line failed" >&2; exit 1; }
 rm -rf "$tmp"
 
 mkdir -p "$HOME/Library/Logs/kokoro"
