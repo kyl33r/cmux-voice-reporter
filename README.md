@@ -6,6 +6,23 @@ Speaks a short headline aloud when a Claude Code session in a [cmux](https://cmu
 
 One speaker for all panes. Child sessions never speak. A single process reads cmux's notification stream and speaks one line at a time.
 
+## Features
+
+| Tool | What it does | Speaks? |
+|---|---|---|
+| `cmux-voice-reporter` | Speaks "<pane> finished: <first sentence>" each time a Claude Code turn ends in any cmux pane. | yes |
+| `cmux-voice-say` | Speaks one headline you choose, in the same voice. Made for an orchestrator session that reads out only the reports that matter. | yes |
+| `cmux-voice-nudge` | Every 3 minutes, speaks the top two items for you from an orchestrator's board file: "Next: 1, … 2, …". | yes |
+| `cmux-status-feed` | Keeps a live markdown table of what every pane last said (pane, time, headline), newest first, for a cmux markdown viewer. | no |
+
+Shared by all of them:
+
+- **Local, free voice.** Kokoro-82M on an Apple Silicon Mac (this one or one you reach over ssh), with macOS `say` as the fallback. No API keys, no cloud calls, no AI summarizing.
+- **One line at a time.** The three speakers share a lock, so lines never overlap.
+- **Separate mute files.** Mute the per-pane announcements, the chosen headlines and the nudges on their own.
+- **Read-only toward your sessions.** Everything reads cmux's existing turn-end events and notifications. Nothing types into a pane or changes a session's config.
+- **Restart-safe.** Cursor files mean a restart resumes where it left off without replaying old events.
+
 ## How it works
 
 1. **Trigger.** cmux launches `claude` through its own wrapper, which installs Stop/Notification hooks that report back to cmux. cmux then emits one `notification.created` event per finished top-level turn. Subagent turns are already suppressed (`CMUX_SUPPRESS_SUBAGENT_NOTIFICATIONS=1`), and idle repeats are deduplicated. The reporter subscribes with `cmux events --name notification.created --reconnect --cursor-file …`. No hook config is needed.
@@ -71,6 +88,26 @@ cmux new-split right --command ~/.local/bin/cmux-voice-nudge --focus false
 ## One speaker at a time
 
 The reporter, `cmux-voice-say` and the nudge share a lock directory, `~/.cache/cmux-voice/speaking.lock`, that holds the speaker's pid. The reporter and `cmux-voice-say` wait up to 30 s for it (`VOICE_LOCK_WAIT` for `cmux-voice-say`). The nudge doesn't wait: it skips the tick. A lock whose pid has exited, or that is older than two minutes, is cleared.
+
+## Status feed: cmux-status-feed
+
+`cmux-status-feed` keeps one row per pane, with the newest first, in `~/.cache/master-board/live.md`, and rewrites the file atomically. Open it in a cmux markdown viewer for a live dashboard of every session.
+
+```bash
+cp bin/cmux-status-feed ~/.local/bin/
+cmux new-split right --command ~/.local/bin/cmux-status-feed --focus false
+cmux markdown open ~/.cache/master-board/live.md
+```
+
+| Pane | Last update | Headline |
+|---|---|---|
+| api tests | 15:54 | The fix is pushed and CI is green. |
+| eval cases | Nov 5 13:06 (quiet) | I've proven the clean-history rewrite on a local ref. |
+
+- On start it seeds the table from `cmux list-notifications`, so it isn't empty. After that it follows the same `notification.created` events as the reporter, with its own cursor file in `~/.cache/cmux-status-feed/`.
+- Pane titles are read fresh from `cmux tree` at each rewrite, so renames show up and closed panes drop out. The table is rewritten at least once a minute, so rows older than `STATUS_QUIET_MINUTES` (default 30) are marked `(quiet)` on time.
+- `STATUS_FILE` sets the output path. `STATUS_SKIP_SURFACES` (space-separated UUIDs) and `STATUS_SKIP_TITLES` (a regex; the default skips the voice and feed panes) leave panes out.
+- It doesn't speak, doesn't call any model, and reads nothing but cmux.
 
 ## Muting
 

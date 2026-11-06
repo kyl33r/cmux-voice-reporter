@@ -62,11 +62,12 @@ speak() {
   fi
 }
 
-headline() {  # first sentence, markdown stripped, capped at ~120 chars on a word
+headline() {  # first sentence, markdown stripped, capped at ~120 bytes on a word
   sed -E 's/\[([^]]*)\]\([^)]*\)/\1/g; s/[*`#_>|]//g; s/  +/ /g; s/^ +//' <<<"$1" |
-    awk '{ if (match($0, /[.!?]( |$)/)) $0 = substr($0, 1, RSTART)
+    LC_ALL=C awk '{ if (match($0, /[.!?]( |$)/)) $0 = substr($0, 1, RSTART)
            if (length($0) > 120) { s = substr($0, 1, 120); sub(/ [^ ]*$/, "", s); $0 = s }
-           print }'
+           print }' |
+    iconv -c -f UTF-8 -t UTF-8 2>/dev/null  # the byte cut (here or cmux's) can split a character
 }
 
 # row: idx:nid|workspace|surface|state|title|subtitle|BODY (may hold '|')|ts|pct:<workspace title>

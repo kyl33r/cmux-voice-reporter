@@ -1,0 +1,106 @@
+#!/bin/bash
+# cmux-status-feed: keep a markdown table of what every cmux pane last said.
+# Reads the same turn-end events as cmux-voice-reporter (own cursor file),
+# keeps one row per surface (latest wins) and rewrites STATUS_FILE atomically.
+# No speech, no AI calls; the panes themselves change nothing.
+#
+#   cmux new-split right --command ~/.local/bin/cmux-status-feed --focus false
+#   cmux markdown open ~/.cache/master-board/live.md
+#   STATUS_FILE=~/.cache/master-board/live.md
+#   STATUS_SKIP_SURFACES="<uuid> <uuid>"      # surfaces to leave out
+#   STATUS_SKIP_TITLES='^(voice reporter|voice nudge|status feed)$'
+#   STATUS_QUIET_MINUTES=30                   # older rows are marked (quiet)
+set -u
+state=~/.cache/cmux-status-feed; mkdir -p "$state"
+out=${STATUS_FILE:-~/.cache/master-board/live.md}; mkdir -p "$(dirname "$out")"
+skip_ids=" ${STATUS_SKIP_SURFACES:-} "
+skip_titles=${STATUS_SKIP_TITLES:-'^(voice reporter|voice nudge|status feed)$'}
+quiet=$(( ${STATUS_QUIET_MINUTES:-30} * 60 ))
+rows=$state/rows.tsv   # sid, epoch, workspace, headline
+: >"$rows"
+
+headline() {  # first sentence, markdown stripped, capped at ~140 bytes on a word
+  sed -E 's/\[([^]]*)\]\([^)]*\)/\1/g; s/[*`#_>|]//g; s/	/ /g; s/  +/ /g; s/^ +//' <<<"$1" |
+    LC_ALL=C awk '{ if (match($0, /[.!?]( |$)/)) $0 = substr($0, 1, RSTART)
+           if (length($0) > 140) { s = substr($0, 1, 140); sub(/ [^ ]*$/, "", s); $0 = s "…" }
+           print }' |
+    iconv -c -f UTF-8 -t UTF-8 2>/dev/null  # the byte cut (here or cmux's) can split a character
+}
+
+epoch() { date -j -u -f %Y-%m-%dT%H:%M:%S "${1:0:19}" +%s 2>/dev/null; }
+
+# row: idx:nid|workspace|surface|state|title|subtitle|BODY (may hold '|')|ts|pct:<workspace title>
+parse_row() {
+  local rest=${1#*|*|*|*|*|*|}
+  nid=${1#*:}; nid=${nid%%|*}
+  sid=$(cut -d'|' -f3 <<<"$1")
+  workspace=${rest##*|pct:}; rest=${rest%|pct:*}
+  ts=${rest##*|}; body=${rest%|*}
+}
+
+upsert() {  # sid epoch workspace headline; keeps whichever row is newer
+  awk -F'\t' -v OFS='\t' -v s="$1" -v e="$2" -v w="$3" -v h="$4" '
+    $1 == s { if ($2 > e) { e = $2; w = $3; h = $4 } next } { print }
+    END { print s, e, w, h }' "$rows" >"$rows.tmp" && mv "$rows.tmp" "$rows"
+}
+
+render() {  # surfaces no longer in the tree drop out; titles are read fresh
+  local titles now today when
+  titles=$(cmux --id-format both tree --all --json 2>/dev/null |
+    jq -r '.. | objects | select(.ref? | strings | startswith("surface:")) | [.id, (.title // "")] | @tsv')
+  [[ -z "$titles" ]] && return
+  now=$(date +%s); today=$(date +%Y%m%d)
+  {
+    echo "# Live · $(date +%H:%M)"
+    echo
+    echo "| Pane | Last update | Headline |"
+    echo "|---|---|---|"
+    sort -t$'\t' -k2,2nr "$rows" | while IFS=$'\t' read -r s e w h; do
+      t=$(awk -F'\t' -v s="$s" '$1 == s { print $2; exit }' <<<"$titles")
+      grep -qF "$s"$'\t' <<<"$titles" || continue
+      [[ -n "$t" && "$t" =~ $skip_titles ]] && continue
+      when=$(date -r "$e" +%H:%M)
+      [[ $(date -r "$e" +%Y%m%d) != "$today" ]] && when=$(date -r "$e" '+%b %-d %H:%M')
+      (( now - e > quiet )) && when+=" (quiet)"
+      t=${t:-$w}
+      printf '| %s | %s | %s |\n' "${t//|//}" "$when" "${h//|//}"
+    done
+  } >"$out.tmp" && mv "$out.tmp" "$out"
+}
+
+take() {  # one notification row -> upsert, unless skipped
+  parse_row "$1"
+  [[ -z "$sid" || "$skip_ids" == *" $sid "* ]] && return
+  local e; e=$(epoch "$ts"); [[ -z "$e" ]] && return
+  upsert "$sid" "$e" "$workspace" "$(headline "$body")"
+}
+
+# Seed from the stored notifications so the table isn't empty on start.
+while IFS= read -r row; do take "$row"; done < <(cmux list-notifications 2>/dev/null)
+render
+
+fifo=$state/events.fifo; rm -f "$fifo"; mkfifo "$fifo"
+cmux events --name notification.created --no-ack --no-heartbeat \
+  --reconnect --cursor-file "$state/seq" >"$fifo" &
+reader=$!
+cleanup() { kill "$reader" 2>/dev/null; rm -f "$fifo" "$out.tmp" "$rows.tmp"; }
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+exec 3<"$fifo"
+
+echo "status feed: writing $out ($(($(wc -l <"$rows"))) panes seeded)"
+while :; do
+  if read -r -t 60 -u 3 ev; then
+    nid=$(jq -r '.payload.notification_id // empty' <<<"$ev")
+    sid=$(jq -r '.surface_id // empty' <<<"$ev")
+    [[ -z "$nid" || "$skip_ids" == *" $sid "* ]] && continue
+    row=$(cmux list-notifications 2>/dev/null | grep -F "|$sid|" | grep -F ":$nid|" | head -1)
+    [[ -z "$row" ]] && continue
+    take "$row"
+    echo "$(date +%H:%M) $sid"
+  else
+    kill -0 "$reader" 2>/dev/null || { echo "events reader exited"; exit 1; }
+  fi
+  render   # also every minute, so rows turn (quiet) on time
+done
