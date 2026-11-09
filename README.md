@@ -61,7 +61,7 @@ cmux new-split right --command ~/.local/bin/cmux-voice-reporter --focus false
 
 ## Voice previews
 
-Each pinned voice says the same line in `samples/`, so you can pick one by ear: "Hi, I'm <name>. The build finished and all tests passed. Ready when you are."
+Each pinned voice says the same line in `samples/`, so you can pick one by ear: "Hi, I'm <name>, reporting for duty. I'll read out each update as soon as your work finishes."
 
 | Preview | `VOICE=` | Sound | Engine |
 |---|---|---|---|
@@ -86,7 +86,7 @@ The default voice, `qwen:airy`, is a soft, breathy female voice. Qwen3-TTS clone
 | What | Where it comes from | Size | When it downloads |
 |---|---|---|---|
 | Qwen3-TTS 0.6B Base (the default voice) | Hugging Face, [`mlx-community/Qwen3-TTS-12Hz-0.6B-Base-bf16`](https://huggingface.co/mlx-community/Qwen3-TTS-12Hz-0.6B-Base-bf16) | 4.7 GB | `install.sh` clones one test line |
-| Reference clips (`voices/airy.wav`, `whisper.wav`, `airy-jp.wav`) | this repo; each was designed once with Qwen3-TTS 1.7B VoiceDesign from a text description | about 0.7 MB in all | copied to the server by `install.sh` |
+| Reference clips (`voices/airy.wav`, `whisper.wav`, `airy-jp.wav`) | this repo; each voice was designed with Qwen3-TTS 1.7B VoiceDesign from a text description, then cloned with the 0.6B Base model saying a short greeting | about 0.9 MB in all | copied to the server by `install.sh` |
 | Kokoro-82M weights (`kokoro-v1_0.safetensors`) | Hugging Face, [`mlx-community/Kokoro-82M-bf16`](https://huggingface.co/mlx-community/Kokoro-82M-bf16) | 312 MB | `install.sh` speaks one test line, which fetches it into `~/.cache/huggingface/hub/` on the server Mac |
 | The 54 Kokoro voices (`voices/*.safetensors`, `af_nicole` and the rest) | the same Hugging Face repo | 27 MB (about 0.5 MB each) | together with the weights; switching voices downloads nothing |
 | mlx-audio and its Python dependencies | PyPI, through `uv tool install` in `install.sh` | about 1.2 GB in `~/.local/share/uv/tools/mlx-audio` | `install.sh` |
