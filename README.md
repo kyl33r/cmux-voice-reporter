@@ -19,6 +19,7 @@ Shared by all of them:
 
 - **Local, free voice.** A breathy Qwen3-TTS voice by default, with Kokoro-82M and then macOS `say` as fallbacks, all on an Apple Silicon Mac (this one or one you reach over ssh). No API keys, no cloud calls, no AI summarizing.
 - **One line at a time.** The three speakers share a lock, so lines never overlap.
+- **Pauses your music.** Whatever is playing (Spotify, Apple Music, YouTube in a browser, anything in the macOS Now Playing menu) pauses while a line is spoken and resumes after. Music you paused yourself stays paused. Needs `brew install media-control`; set `PAUSE_MEDIA=0` to turn it off.
 - **Separate mute files.** Mute the per-pane announcements, the chosen headlines and the nudges on their own.
 - **Read-only toward your sessions.** Everything reads cmux's existing turn-end events and notifications. Nothing types into a pane or changes a session's config.
 - **Restart-safe.** Cursor files mean a restart resumes where it left off without replaying old events.
@@ -34,6 +35,7 @@ Shared by all of them:
 
 ```bash
 cp bin/cmux-voice-reporter ~/.local/bin/
+brew install media-control            # optional: pause music while a line is spoken
 # TTS server, on this Mac or another one you can ssh to:
 kokoro-server/install.sh            # asks about Qwen; --qwen / --no-qwen to decide up front,
                                     # --launchd to keep the server running
@@ -114,6 +116,7 @@ Then send `"lang_code": "j"` with the request. The running server picks this up 
 | `VOICE` | `qwen:airy` | `qwen:<name>` clones `voices/<name>.wav` with Qwen3-TTS (`qwen:airy`, `qwen:whisper`, `qwen:airy-jp`); a Kokoro voice (`af_nicole`, `bf_emma`, …, or a blend `"af_heart,jf_alpha"`); or any macOS `say` voice name |
 | `FALLBACK_VOICE` | `af_nicole jf_alpha Samantha` | Voices tried in order when `VOICE` fails. A Qwen line gets one try within `QWEN_TIMEOUT`; a Kokoro first voice gets up to 60 s and one retry. After a failure the rest of that engine is skipped, and an unreachable server skips straight to the first `say` voice. Each fallback writes `kokoro fallback: <reason>; using <voice>` to `spoken.log`. |
 | `QWEN_TIMEOUT` | `15` | seconds a Qwen line may take before the line falls back |
+| `PAUSE_MEDIA` | `1` | `0` leaves music playing; `1` pauses whatever is in Now Playing while a line is spoken (needs `media-control`) |
 | `QWEN_VOICE_DIR` | `~/.local/share/cmux-voice/voices` | folder of reference clips on the server (`install.sh` copies `voices/` there) |
 | `QWEN_MODEL` | `mlx-community/Qwen3-TTS-12Hz-0.6B-Base-bf16` | Qwen3-TTS model used for cloning |
 | `KOKORO_HOST` | unset | ssh host running the server; unset means the server is on this machine |
