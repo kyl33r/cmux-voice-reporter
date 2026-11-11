@@ -117,7 +117,7 @@ Then send `"lang_code": "j"` with the request. The running server picks this up 
 | `FALLBACK_VOICE` | `af_nicole jf_alpha Samantha` | Voices tried in order when `VOICE` fails. A Qwen line gets one try within `QWEN_TIMEOUT`; a Kokoro first voice gets up to 60 s and one retry. After a failure the rest of that engine is skipped, and an unreachable server skips straight to the first `say` voice. Each fallback writes `kokoro fallback: <reason>; using <voice>` to `spoken.log`. |
 | `QWEN_TIMEOUT` | `15` | seconds a Qwen line may take before the line falls back |
 | `PAUSE_MEDIA` | `1` | `0` leaves music playing; `1` pauses whatever is in Now Playing while a line is spoken (needs `media-control`) |
-| `VOICE_PREFIX`, `VOICE_SUFFIX` | unset | words spoken before and after every line. Each is a list separated by `|`, and every line picks one entry at random, for example `VOICE_PREFIX="Heads up.\|Quick update.\|Hey."`. An empty entry (`"Over.\|\|Done."`) sometimes says nothing. Applies to the reporter, `cmux-voice-say` and the nudge |
+| `VOICE_PHRASES_DIR` | `~/.config/cmux-voice` | folder holding `prefix.txt` and `suffix.txt`, the phrases said before and after every line (see below) |
 | `QWEN_VOICE_DIR` | `~/.local/share/cmux-voice/voices` | folder of reference clips on the server (`install.sh` copies `voices/` there) |
 | `QWEN_MODEL` | `mlx-community/Qwen3-TTS-12Hz-0.6B-Base-bf16` | Qwen3-TTS model used for cloning |
 | `KOKORO_HOST` | unset | ssh host running the server; unset means the server is on this machine |
@@ -126,6 +126,23 @@ Then send `"lang_code": "j"` with the request. The running server picks this up 
 
 - Log of spoken lines with timing: `~/.cache/cmux-voice/spoken.log`.
 - `--once` exits after the first spoken line.
+
+## Before and after each line
+
+To have every line start or end with a phrase, put phrases in `~/.config/cmux-voice/prefix.txt` and `suffix.txt`, one per line. Each spoken line picks one phrase from each file at random. The files are read before every line, so an edit applies to the next line without a reinstall or restart.
+
+```bash
+mkdir -p ~/.config/cmux-voice && cp phrases/*.txt ~/.config/cmux-voice/   # start from the examples
+```
+
+```text
+# prefix.txt
+Heads up.
+Quick update.
+-
+```
+
+Lines starting with `#` and blank lines are skipped. A line `-` means say nothing, so adding more `-` lines makes a phrase less frequent. Delete a file, or leave it empty, to turn that phrase off. This applies to the reporter, `cmux-voice-say` and the nudge; `spoken.log` keeps the line without the phrases.
 
 ## Chosen headlines: cmux-voice-say
 
