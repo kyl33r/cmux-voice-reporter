@@ -1,0 +1,5 @@
+# Said after each spoken line. One phrase per line; one is picked at random.
+# Lines starting with # and blank lines are skipped. A line "-" means say nothing.
+Over.
+-
+-

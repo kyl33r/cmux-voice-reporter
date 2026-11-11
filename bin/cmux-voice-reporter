@@ -11,6 +11,9 @@
 #   VOICE=Samantha cmux-voice-reporter          # or any macOS `say` voice
 #   FALLBACK_VOICE="af_nicole jf_alpha Samantha" # tried in order if VOICE fails
 #   QWEN_TIMEOUT=15  QWEN_VOICE_DIR=<dir on the server>  QWEN_MODEL=<repo id>
+#   ~/.config/cmux-voice/prefix.txt, suffix.txt  # phrases said before/after each line,
+#                                                # one picked at random; edits apply at once
+#   PAUSE_MEDIA=0                                # leave music playing while speaking
 #   KOKORO_HOST=my-mini.local                    # ssh host running the Kokoro server
 #                                                # (unset: server on this machine)
 #   VOICE_SKIP_SURFACE=<uuid>                    # surface to stay silent for
@@ -24,6 +27,7 @@ kokoro_host=${KOKORO_HOST:-}
 qwen_model=${QWEN_MODEL:-mlx-community/Qwen3-TTS-12Hz-0.6B-Base-bf16}
 qwen_dir=${QWEN_VOICE_DIR:-$HOME/.local/share/cmux-voice/voices}   # path on the server
 qwen_timeout=${QWEN_TIMEOUT:-15}
+phrases=${VOICE_PHRASES_DIR:-$HOME/.config/cmux-voice}   # prefix.txt, suffix.txt
 skip=${VOICE_SKIP_SURFACE:-}
 once=; [[ "${1:-}" == --once ]] && once=1
 
@@ -145,10 +149,25 @@ media_pause() {
 }
 media_resume() { [[ -n "${media_paused:-}" ]] && media-control play; media_paused=; }
 
+# A random phrase from a file, one per line (# comments and blank lines skipped;
+# a line "-" means say nothing). Read on every line, so edits apply at once.
+pick() {
+  local l a=()
+  [[ -r "$1" ]] || return 0
+  while IFS= read -r l || [[ -n "$l" ]]; do
+    l=$(sed -E 's/^[[:space:]]+|[[:space:]]+$//g' <<<"$l")
+    [[ -z "$l" || "$l" == \#* ]] || a+=("$l")
+  done <"$1"
+  (( ${#a[@]} )) || return 0
+  l=${a[RANDOM % ${#a[@]}]}
+  [[ "$l" == - ]] || printf '%s' "$l"
+}
+
 # Speak $1 a sentence at a time: synthesize the next chunk while the current one
 # plays, so long lines stay inside the Qwen limit and start sooner.
 speak_text() {  # $1: text, $2: wav path prefix
-  local chunk i=0 player= skip=" " say_voice
+  local chunk i=0 player= skip=" " say_voice pre post
+  pre=$(pick "$phrases/prefix.txt"); post=$(pick "$phrases/suffix.txt")
   while IFS= read -r chunk; do
     i=$((i + 1))
     if synth_chain "$chunk" "$2.$i.wav"; then
@@ -158,7 +177,7 @@ speak_text() {  # $1: text, $2: wav path prefix
       [[ -n "$player" ]] && wait "$player"; player=
       media_pause; say -v "$say_voice" -- "$chunk"
     fi
-  done < <(chunks "$1")
+  done < <(chunks "${pre:+$pre }$1${post:+ $post}")
   [[ -n "$player" ]] && wait "$player"
   media_resume
   rm -f "$2".*.wav
