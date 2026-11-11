@@ -232,6 +232,14 @@ The Kokoro server listens on `127.0.0.1:8880` only. A remote client reaches it o
 
 Copy them into `~/.claude/skills/` (Claude Code) or `~/.agents/skills/`.
 
+## Development
+
+`tests/smoke.sh` runs `cmux-voice-say` against a stand-in `say` in a throwaway `HOME`, so it needs no audio, TTS server or cmux. CI runs it on macOS with `bash -n` and `shellcheck -S warning` on every pull request.
+
+```bash
+tests/smoke.sh
+```
+
 ## Options considered
 
 | Voice | Cost | Notes |
