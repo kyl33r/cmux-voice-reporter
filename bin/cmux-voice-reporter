@@ -135,6 +135,16 @@ chunks() {  # one line per sentence; tiny ones merged, ones over ~25 words cut a
     print "$_\n" for @out;' <<<"$1"
 }
 
+# Pause whatever is playing (any app in macOS Now Playing) while we speak, and
+# resume only what we paused. Needs media-control (brew install media-control).
+media_paused=
+media_pause() {
+  [[ "${PAUSE_MEDIA:-1}" == 1 && -z "$media_paused" ]] && command -v media-control >/dev/null || return 0
+  media-control get 2>/dev/null | jq -e '.playing == true' >/dev/null || return 0
+  media-control pause && media_paused=1
+}
+media_resume() { [[ -n "${media_paused:-}" ]] && media-control play; media_paused=; }
+
 # Speak $1 a sentence at a time: synthesize the next chunk while the current one
 # plays, so long lines stay inside the Qwen limit and start sooner.
 speak_text() {  # $1: text, $2: wav path prefix
@@ -143,13 +153,14 @@ speak_text() {  # $1: text, $2: wav path prefix
     i=$((i + 1))
     if synth_chain "$chunk" "$2.$i.wav"; then
       [[ -n "$player" ]] && wait "$player"
-      afplay "$2.$i.wav" & player=$!
+      media_pause; afplay "$2.$i.wav" & player=$!
     else
       [[ -n "$player" ]] && wait "$player"; player=
-      say -v "$say_voice" -- "$chunk"
+      media_pause; say -v "$say_voice" -- "$chunk"
     fi
   done < <(chunks "$1")
   [[ -n "$player" ]] && wait "$player"
+  media_resume
   rm -f "$2".*.wav
 }
 
@@ -182,6 +193,7 @@ cleanup() {
   local c
   for c in $(pgrep -P $$); do pkill -P "$c"; kill "$c"; done 2>/dev/null
   [[ "$(cat "$lock/pid" 2>/dev/null)" == $$ ]] && rm -rf "$lock"
+  media_resume
 }
 trap cleanup EXIT
 trap 'exit 130' INT
