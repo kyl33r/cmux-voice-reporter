@@ -117,7 +117,7 @@ Then send `"lang_code": "j"` with the request. The running server picks this up 
 | `FALLBACK_VOICE` | `af_nicole jf_alpha Samantha` | Voices tried in order when `VOICE` fails. A Qwen line gets one try within `QWEN_TIMEOUT`; a Kokoro first voice gets up to 60 s and one retry. After a failure the rest of that engine is skipped, and an unreachable server skips straight to the first `say` voice. Each fallback writes `kokoro fallback: <reason>; using <voice>` to `spoken.log`. |
 | `QWEN_TIMEOUT` | `15` | seconds a Qwen line may take before the line falls back |
 | `PAUSE_MEDIA` | `1` | `0` leaves music playing; `1` pauses whatever is in Now Playing while a line is spoken (needs `media-control`) |
-| `VOICE_PREFIX`, `VOICE_SUFFIX` | unset | words spoken before and after every line, for example `VOICE_PREFIX="Heads up."` or `VOICE_SUFFIX="Over."`; applies to the reporter, `cmux-voice-say` and the nudge |
+| `VOICE_PREFIX`, `VOICE_SUFFIX` | unset | words spoken before and after every line. Each is a list separated by `|`, and every line picks one entry at random, for example `VOICE_PREFIX="Heads up.\|Quick update.\|Hey."`. An empty entry (`"Over.\|\|Done."`) sometimes says nothing. Applies to the reporter, `cmux-voice-say` and the nudge |
 | `QWEN_VOICE_DIR` | `~/.local/share/cmux-voice/voices` | folder of reference clips on the server (`install.sh` copies `voices/` there) |
 | `QWEN_MODEL` | `mlx-community/Qwen3-TTS-12Hz-0.6B-Base-bf16` | Qwen3-TTS model used for cloning |
 | `KOKORO_HOST` | unset | ssh host running the server; unset means the server is on this machine |

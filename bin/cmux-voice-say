@@ -141,10 +141,14 @@ media_pause() {
 }
 media_resume() { [[ -n "${media_paused:-}" ]] && media-control play; media_paused=; }
 
+# One random entry from a "|"-separated list; an empty entry means say nothing.
+pick() { local IFS="|" a; read -ra a <<<"$1"; (( ${#a[@]} )) && printf "%s" "${a[RANDOM % ${#a[@]}]}"; }
+
 # Speak $1 a sentence at a time: synthesize the next chunk while the current one
 # plays, so long lines stay inside the Qwen limit and start sooner.
 speak_text() {  # $1: text, $2: wav path prefix
-  local chunk i=0 player= skip=" " say_voice
+  local chunk i=0 player= skip=" " say_voice pre post
+  pre=$(pick "${VOICE_PREFIX:-}"); post=$(pick "${VOICE_SUFFIX:-}")
   while IFS= read -r chunk; do
     i=$((i + 1))
     if synth_chain "$chunk" "$2.$i.wav"; then
@@ -154,7 +158,7 @@ speak_text() {  # $1: text, $2: wav path prefix
       [[ -n "$player" ]] && wait "$player"; player=
       media_pause; say -v "$say_voice" -- "$chunk"
     fi
-  done < <(chunks "${VOICE_PREFIX:+$VOICE_PREFIX }$1${VOICE_SUFFIX:+ $VOICE_SUFFIX}")
+  done < <(chunks "${pre:+$pre }$1${post:+ $post}")
   [[ -n "$player" ]] && wait "$player"
   media_resume
   rm -f "$2".*.wav
