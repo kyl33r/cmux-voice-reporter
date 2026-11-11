@@ -1,0 +1,19 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    # macOS: the scripts target its bash 3.2, afplay and say.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: brew install shellcheck
+      - name: Syntax
+        run: for f in bin/* kokoro-server/install.sh tests/*.sh; do /bin/bash -n "$f" || exit 1; done
+      - name: Shellcheck
+        run: shellcheck -S warning bin/* kokoro-server/install.sh tests/*.sh
+      - name: Smoke test
+        run: /bin/bash tests/smoke.sh

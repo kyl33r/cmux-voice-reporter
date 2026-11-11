@@ -94,7 +94,7 @@ tts_wav() {  # $1: text, $2: wav path, $3: voice, $4: tries. On failure $why and
 # voice gets one retry; Qwen gets one try within $qwen_timeout. A failed engine
 # joins $skip for the rest of the line; an unreachable server skips both engines.
 synth_chain() {  # $1: text, $2: wav path
-  local v e tries reasons= first=1
+  local v e tries reasons='' first=1
   for v in "$voice" $fallback; do
     e=$(engine "$v")
     [[ "$skip" == *" $e "* ]] && continue
@@ -159,7 +159,7 @@ pick() {
 # Speak $1 a sentence at a time: synthesize the next chunk while the current one
 # plays, so long lines stay inside the Qwen limit and start sooner.
 speak_text() {  # $1: text, $2: wav path prefix
-  local chunk i=0 player= skip=" " say_voice pre post
+  local chunk i=0 player='' skip=" " say_voice pre post
   pre=$(pick "$phrases/prefix.txt"); post=$(pick "$phrases/suffix.txt")
   while IFS= read -r chunk; do
     i=$((i + 1))
