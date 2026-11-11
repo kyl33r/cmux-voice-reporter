@@ -5,7 +5,7 @@
 #
 #   cmux-voice-say "api tests pushed; the flaky case now passes"
 #   touch ~/.cache/cmux-voice/master-mute   # silence; delete to unmute
-#   VOICE, FALLBACK_VOICE, KOKORO_HOST, QWEN_*: as for cmux-voice-reporter
+#   VOICE, FALLBACK_VOICE, KOKORO_HOST, QWEN_*, VOICE_PREFIX, VOICE_SUFFIX, PAUSE_MEDIA: as for cmux-voice-reporter
 #   VOICE_TAG=master       # tag for the spoken.log line
 #   VOICE_LOCK_WAIT=30     # seconds to wait for another speaker; 0 = skip if busy
 # Exits 3 when it skipped because another line was still playing.
@@ -154,7 +154,7 @@ speak_text() {  # $1: text, $2: wav path prefix
       [[ -n "$player" ]] && wait "$player"; player=
       media_pause; say -v "$say_voice" -- "$chunk"
     fi
-  done < <(chunks "$1")
+  done < <(chunks "${VOICE_PREFIX:+$VOICE_PREFIX }$1${VOICE_SUFFIX:+ $VOICE_SUFFIX}")
   [[ -n "$player" ]] && wait "$player"
   media_resume
   rm -f "$2".*.wav

@@ -11,6 +11,8 @@
 #   VOICE=Samantha cmux-voice-reporter          # or any macOS `say` voice
 #   FALLBACK_VOICE="af_nicole jf_alpha Samantha" # tried in order if VOICE fails
 #   QWEN_TIMEOUT=15  QWEN_VOICE_DIR=<dir on the server>  QWEN_MODEL=<repo id>
+#   VOICE_PREFIX="Hey."  VOICE_SUFFIX="Over."     # spoken before and after every line
+#   PAUSE_MEDIA=0                                # leave music playing while speaking
 #   KOKORO_HOST=my-mini.local                    # ssh host running the Kokoro server
 #                                                # (unset: server on this machine)
 #   VOICE_SKIP_SURFACE=<uuid>                    # surface to stay silent for
@@ -158,7 +160,7 @@ speak_text() {  # $1: text, $2: wav path prefix
       [[ -n "$player" ]] && wait "$player"; player=
       media_pause; say -v "$say_voice" -- "$chunk"
     fi
-  done < <(chunks "$1")
+  done < <(chunks "${VOICE_PREFIX:+$VOICE_PREFIX }$1${VOICE_SUFFIX:+ $VOICE_SUFFIX}")
   [[ -n "$player" ]] && wait "$player"
   media_resume
   rm -f "$2".*.wav
