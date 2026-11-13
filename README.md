@@ -34,7 +34,7 @@ Shared by all of them:
 ## Install
 
 ```bash
-cp bin/cmux-voice-reporter ~/.local/bin/
+cp bin/cmux-voice-reporter bin/cmux-voice-volume ~/.local/bin/
 brew install media-control            # optional: pause music while a line is spoken
 # TTS server, on this Mac or another one you can ssh to:
 kokoro-server/install.sh            # asks about Qwen; --qwen / --no-qwen to decide up front,
@@ -117,6 +117,7 @@ Then send `"lang_code": "j"` with the request. The running server picks this up 
 | `FALLBACK_VOICE` | `af_nicole jf_alpha Samantha` | Voices tried in order when `VOICE` fails. A Qwen line gets one try within `QWEN_TIMEOUT`; a Kokoro first voice gets up to 60 s and one retry. After a failure the rest of that engine is skipped, and an unreachable server skips straight to the first `say` voice. Each fallback writes `kokoro fallback: <reason>; using <voice>` to `spoken.log`. |
 | `QWEN_TIMEOUT` | `15` | seconds a Qwen line may take before the line falls back |
 | `PAUSE_MEDIA` | `1` | `0` leaves music playing; `1` pauses whatever is in Now Playing while a line is spoken (needs `media-control`) |
+| `VOICE_VOLUME` | unset | 0–100, overrides the level set with `cmux-voice-volume` (see below) |
 | `VOICE_PHRASES_DIR` | `~/.config/cmux-voice` | folder holding `prefix.txt` and `suffix.txt`, the phrases said before and after every line (see below) |
 | `QWEN_VOICE_DIR` | `~/.local/share/cmux-voice/voices` | folder of reference clips on the server (`install.sh` copies `voices/` there) |
 | `QWEN_MODEL` | `mlx-community/Qwen3-TTS-12Hz-0.6B-Base-bf16` | Qwen3-TTS model used for cloning |
@@ -195,6 +196,19 @@ cmux-status-since nudge      # another reader, with its own cursor
 - The pane title comes from `cmux tree` and the headline from `cmux list-notifications`. cmux keeps only queued notifications. When one was already dismissed or replaced, the line says `(text no longer in cmux)`; call it often to keep the text.
 - `STATUS_SKIP_SURFACES` (space-separated UUIDs) leaves panes out, such as the caller's own.
 - It doesn't speak, doesn't call any model, and reads nothing but cmux.
+
+## Volume
+
+`cmux-voice-volume` sets how loud the voice plays, from 0 to 100 percent in steps of 1. It changes only the spoken lines, not the Mac's volume or your music. The level is read before every line, so a change applies to the next one.
+
+```bash
+cmux-voice-volume        # print the current level (100 by default)
+cmux-voice-volume 40     # set it to 40%
+cmux-voice-volume +5     # step up or down; stops at 0 and 100
+cmux-voice-volume -10
+```
+
+The level lives in `~/.config/cmux-voice/volume`. Anything other than a number from 0 to 100 is refused, and a broken file plays at 100%.
 
 ## Muting
 
