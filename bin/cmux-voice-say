@@ -156,24 +156,35 @@ pick() {
   [[ "$l" == - ]] || printf '%s' "$l"
 }
 
+# Playback level for afplay (0.00-1.00) from VOICE_VOLUME or the volume file
+# (0-100, set with cmux-voice-volume). Re-read every line; bad values mean 100.
+volume() {
+  local v=${VOICE_VOLUME:-}
+  [[ -z "$v" && -r "$phrases/volume" ]] && v=$(tr -dc 0-9 <"$phrases/volume")
+  [[ "$v" =~ ^[0-9]+$ ]] && (( 10#$v <= 100 )) || v=100
+  awk -v p="$((10#$v))" 'BEGIN { printf "%.2f", p / 100 }'
+}
+
 # Speak $1 a sentence at a time: synthesize the next chunk while the current one
 # plays, so long lines stay inside the Qwen limit and start sooner.
 speak_text() {  # $1: text, $2: wav path prefix
-  local chunk i=0 player='' skip=" " say_voice pre post
+  local chunk i=0 player='' skip=" " say_voice pre post vol
+  vol=$(volume)
   pre=$(pick "$phrases/prefix.txt"); post=$(pick "$phrases/suffix.txt")
   while IFS= read -r chunk; do
     i=$((i + 1))
     if synth_chain "$chunk" "$2.$i.wav"; then
       [[ -n "$player" ]] && wait "$player"
-      media_pause; afplay "$2.$i.wav" & player=$!
+      media_pause; afplay -v "$vol" "$2.$i.wav" & player=$!
     else
       [[ -n "$player" ]] && wait "$player"; player=
-      media_pause; say -v "$say_voice" -- "$chunk"
+      media_pause
+      say -v "$say_voice" -o "$2.$i.aiff" -- "$chunk" && afplay -v "$vol" "$2.$i.aiff"
     fi
   done < <(chunks "${pre:+$pre }$1${post:+ $post}")
   [[ -n "$player" ]] && wait "$player"
   media_resume
-  rm -f "$2".*.wav
+  rm -f "$2".*.wav "$2".*.aiff
 }
 
 log_fallback() {
