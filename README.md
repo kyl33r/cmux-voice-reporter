@@ -115,7 +115,8 @@ Then send `"lang_code": "j"` with the request. The running server picks this up 
 |---|---|---|
 | `VOICE` | `qwen:airy` | `qwen:<name>` clones `voices/<name>.wav` with Qwen3-TTS (`qwen:airy`, `qwen:whisper`, `qwen:airy-jp`); a Kokoro voice (`af_nicole`, `bf_emma`, …, or a blend `"af_heart,jf_alpha"`); or any macOS `say` voice name |
 | `FALLBACK_VOICE` | `af_nicole jf_alpha Samantha` | Voices tried in order when `VOICE` fails. A Qwen line gets one try within `QWEN_TIMEOUT`; a Kokoro first voice gets up to 60 s and one retry. After a failure the rest of that engine is skipped, and an unreachable server skips straight to the first `say` voice. Each fallback writes `kokoro fallback: <reason>; using <voice>` to `spoken.log`. |
-| `QWEN_TIMEOUT` | `15` | seconds a Qwen line may take before the line falls back |
+| `QWEN_TIMEOUT` | `15` | seconds each later sentence of a Qwen line may take before the line falls back |
+| `QWEN_FIRST_TIMEOUT` | `30` | seconds the first sentence may take; longer because a busy server may have to reload the model first |
 | `PAUSE_MEDIA` | `1` | `0` leaves music playing; `1` pauses whatever is in Now Playing while a line is spoken (needs `media-control`) |
 | `VOICE_VOLUME` | unset | 0–200, overrides the level set with `cmux-voice-volume` (see below) |
 | `VOICE_PHRASES_DIR` | `~/.config/cmux-voice` | folder holding `prefix.txt` and `suffix.txt`, the phrases said before and after every line (see below) |
