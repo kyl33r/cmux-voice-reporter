@@ -10,7 +10,7 @@ chmod +x "$tmp/bin/say"
 # Stand-ins for afplay (records its volume) and curl (returns fake audio), so
 # nothing reaches the speakers or a TTS server.
 printf '#!/bin/bash\nprintf "%%s\\n" "$2" >>"%s/played"\n' "$tmp" >"$tmp/bin/afplay"
-printf '#!/bin/bash\ncat >/dev/null; printf RIFFfake\n' >"$tmp/bin/curl"
+printf '#!/bin/bash\nwhile [[ $# -gt 0 && $1 != --max-time ]]; do shift; done; printf "%%s\\n" "$2" >>"%s/limits"\ncat >/dev/null; printf RIFFfake\n' "$tmp" >"$tmp/bin/curl"
 chmod +x "$tmp/bin/afplay" "$tmp/bin/curl"
 fails=0
 
@@ -69,6 +69,10 @@ rm -f "$tmp/played"
 HOME="$tmp/home" PATH="$tmp/bin:$PATH" VOICE=af_nicole FALLBACK_VOICE=Samantha PAUSE_MEDIA=0 \
   VOICE_VOLUME=30 VOICE_LOCK_WAIT=5 "$repo/bin/cmux-voice-say" "Server voice check."
 check "the TTS server path uses the level too" "0.30" "$(cat "$tmp/played" 2>/dev/null)"
+rm -f "$tmp/limits"
+HOME="$tmp/home" PATH="$tmp/bin:$PATH" VOICE=qwen:airy FALLBACK_VOICE=Samantha PAUSE_MEDIA=0 \
+  VOICE_LOCK_WAIT=5 "$repo/bin/cmux-voice-say" "$long"
+check "Qwen gives the first sentence 30 s and the rest 15 s" "30 15" "$(paste -sd" " "$tmp/limits" 2>/dev/null)"
 
 
 touch "$tmp/home/.cache/cmux-voice/master-mute"

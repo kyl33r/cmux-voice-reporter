@@ -18,6 +18,7 @@ kokoro_host=${KOKORO_HOST:-}
 qwen_model=${QWEN_MODEL:-mlx-community/Qwen3-TTS-12Hz-0.6B-Base-bf16}
 qwen_dir=${QWEN_VOICE_DIR:-$HOME/.local/share/cmux-voice/voices}   # path on the server
 qwen_timeout=${QWEN_TIMEOUT:-15}
+qwen_first_timeout=${QWEN_FIRST_TIMEOUT:-30}   # first chunk of a line: a swapped-out model reloads
 phrases=${VOICE_PHRASES_DIR:-$HOME/.config/cmux-voice}   # prefix.txt, suffix.txt
 tag=${VOICE_TAG:-master}
 text=$*
@@ -65,6 +66,7 @@ tts_wav() {  # $1: text, $2: wav path, $3: voice, $4: tries. On failure $why and
   local try req limit
   if [[ "$3" == qwen:* ]]; then
     limit=$qwen_timeout
+    (( i == 1 )) && limit=$qwen_first_timeout   # i: chunk number in speak_text
     req=$(jq -n --arg t "$1" --arg m "$qwen_model" --arg r "$qwen_dir/${3#qwen:}.wav" \
       '{model:$m, input:$t, ref_audio:$r, response_format:"wav"}')
   else
@@ -91,7 +93,8 @@ tts_wav() {  # $1: text, $2: wav path, $3: voice, $4: tries. On failure $why and
 
 # Synthesize $1 into $2 with $voice, else each $fallback voice in turn. Returns 0
 # with the wav ready, or 1 with $say_voice set for a `say` voice. A Kokoro first
-# voice gets one retry; Qwen gets one try within $qwen_timeout. A failed engine
+# voice gets one retry; Qwen gets one try within $qwen_timeout
+# ($qwen_first_timeout for the first chunk of a line). A failed engine
 # joins $skip for the rest of the line; an unreachable server skips both engines.
 synth_chain() {  # $1: text, $2: wav path
   local v e tries reasons='' first=1
