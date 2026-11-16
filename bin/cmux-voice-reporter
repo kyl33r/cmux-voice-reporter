@@ -164,11 +164,12 @@ pick() {
 }
 
 # Playback level for afplay (0.00-1.00) from VOICE_VOLUME or the volume file
-# (0-100, set with cmux-voice-volume). Re-read every line; bad values mean 100.
+# (0-200, set with cmux-voice-volume; over 100 boosts and can distort).
+# Re-read every line; bad values mean 100.
 volume() {
   local v=${VOICE_VOLUME:-}
   [[ -z "$v" && -r "$phrases/volume" ]] && v=$(tr -dc 0-9 <"$phrases/volume")
-  [[ "$v" =~ ^[0-9]+$ ]] && (( 10#$v <= 100 )) || v=100
+  [[ "$v" =~ ^[0-9]+$ ]] && (( 10#$v <= 200 )) || v=100
   awk -v p="$((10#$v))" 'BEGIN { printf "%.2f", p / 100 }'
 }
 

@@ -117,7 +117,7 @@ Then send `"lang_code": "j"` with the request. The running server picks this up 
 | `FALLBACK_VOICE` | `af_nicole jf_alpha Samantha` | Voices tried in order when `VOICE` fails. A Qwen line gets one try within `QWEN_TIMEOUT`; a Kokoro first voice gets up to 60 s and one retry. After a failure the rest of that engine is skipped, and an unreachable server skips straight to the first `say` voice. Each fallback writes `kokoro fallback: <reason>; using <voice>` to `spoken.log`. |
 | `QWEN_TIMEOUT` | `15` | seconds a Qwen line may take before the line falls back |
 | `PAUSE_MEDIA` | `1` | `0` leaves music playing; `1` pauses whatever is in Now Playing while a line is spoken (needs `media-control`) |
-| `VOICE_VOLUME` | unset | 0–100, overrides the level set with `cmux-voice-volume` (see below) |
+| `VOICE_VOLUME` | unset | 0–200, overrides the level set with `cmux-voice-volume` (see below) |
 | `VOICE_PHRASES_DIR` | `~/.config/cmux-voice` | folder holding `prefix.txt` and `suffix.txt`, the phrases said before and after every line (see below) |
 | `QWEN_VOICE_DIR` | `~/.local/share/cmux-voice/voices` | folder of reference clips on the server (`install.sh` copies `voices/` there) |
 | `QWEN_MODEL` | `mlx-community/Qwen3-TTS-12Hz-0.6B-Base-bf16` | Qwen3-TTS model used for cloning |
@@ -199,16 +199,21 @@ cmux-status-since nudge      # another reader, with its own cursor
 
 ## Volume
 
-`cmux-voice-volume` sets how loud the voice plays, from 0 to 100 percent in steps of 1. It changes only the spoken lines, not the Mac's volume or your music. The level is read before every line, so a change applies to the next one.
+`cmux-voice-volume` sets how loud the voice plays, from 0 to 200 percent in steps of 1. The default is 100. It changes only the spoken lines, not the Mac's volume or your music, and it is read before every line, so a change applies to the next one.
+
+The level is relative to the Mac's volume: at 50 the voice plays at half of whatever the Mac is set to, and with the Mac muted you hear nothing.
 
 ```bash
 cmux-voice-volume        # print the current level (100 by default)
 cmux-voice-volume 40     # set it to 40%
-cmux-voice-volume +5     # step up or down; stops at 0 and 100
+cmux-voice-volume 120    # boost the voice above the Mac's volume
+cmux-voice-volume +5     # step up or down; stops at 0 and 200
 cmux-voice-volume -10
 ```
 
-The level lives in `~/.config/cmux-voice/volume`. Anything other than a number from 0 to 100 is refused, and a broken file plays at 100%.
+The level lives in `~/.config/cmux-voice/volume`. Anything other than a number from 0 to 200 is refused, and a broken file plays at 100%.
+
+**Above 100 is a digital boost, and tuning it is up to you.** It makes the voice louder than the Mac's volume alone, but there is no headroom: when a clip is already near full loudness, its peaks get cut off (clipped) and the voice sounds crackly or harsh. How far you can go depends on the voice: a quiet voice takes more boost than one that is already loud. Raise the level a step at a time, listen, and step back down if it crackles. The steps also aren't even to the ear: going from 100 to 50 sounds only somewhat quieter, while 20 to 10 is a big drop.
 
 ## Muting
 

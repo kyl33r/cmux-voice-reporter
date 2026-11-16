@@ -1,20 +1,23 @@
 #!/bin/bash
-# cmux-voice-volume: show or set how loud spoken lines play, in percent (0-100).
+# cmux-voice-volume: show or set how loud spoken lines play, in percent (0-200).
 #
 #   cmux-voice-volume          # print the current level
 #   cmux-voice-volume 40       # set it to 40%
-#   cmux-voice-volume +5       # step up or down; stops at 0 and 100
+#   cmux-voice-volume 120      # over 100 boosts the voice above the Mac's volume
+#   cmux-voice-volume +5       # step up or down; stops at 0 and 200
 #   cmux-voice-volume -10
 #
 # The reporter, cmux-voice-say and the nudge read the level before every line,
 # so a change applies to the next line. VOICE_VOLUME, when set, overrides it.
 # This changes only the voice, not the Mac's volume or your music.
+# The level multiplies the Mac's volume. Above 100 is a digital boost: loud
+# voices can crackle (clip), so raise it a step at a time and listen.
 set -u
 file=${VOICE_PHRASES_DIR:-$HOME/.config/cmux-voice}/volume
-usage() { echo "usage: cmux-voice-volume [0-100 | +N | -N]" >&2; exit 2; }
+usage() { echo "usage: cmux-voice-volume [0-200 | +N | -N]" >&2; exit 2; }
 
 cur=; [[ -r "$file" ]] && cur=$(tr -dc 0-9 <"$file")
-[[ "$cur" =~ ^[0-9]+$ ]] && (( 10#$cur <= 100 )) || cur=100
+[[ "$cur" =~ ^[0-9]+$ ]] && (( 10#$cur <= 200 )) || cur=100
 cur=$((10#$cur))
 
 case "${1:-}" in
@@ -24,9 +27,9 @@ case "${1:-}" in
     step=$((10#${1:1}))
     if [[ "${1:0:1}" == + ]]; then new=$((cur + step)); else new=$((cur - step)); fi
     (( new < 0 )) && new=0
-    (( new > 100 )) && new=100 ;;
+    (( new > 200 )) && new=200 ;;
   *)
-    [[ "$1" =~ ^[0-9]+$ ]] && (( 10#$1 <= 100 )) || usage
+    [[ "$1" =~ ^[0-9]+$ ]] && (( 10#$1 <= 200 )) || usage
     new=$((10#$1)) ;;
 esac
 (( $# > 1 )) && usage

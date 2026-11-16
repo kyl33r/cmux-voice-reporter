@@ -26,7 +26,7 @@ cmux close-surface --surface <old-surface>
 
 ## Volume
 
-When the user asks for the voice louder, quieter or at a level, run `cmux-voice-volume` (in `~/.local/bin`): no argument prints the level, `N` sets 0–100, `+N` / `-N` steps and stops at 0 and 100. It exits 2 on anything else. It changes only the spoken lines and applies from the next line, with no restart. Do not change the Mac's system volume for this.
+When the user asks for the voice louder, quieter or at a level, run `cmux-voice-volume` (in `~/.local/bin`): no argument prints the level, `N` sets 0–200 (default 100), `+N` / `-N` steps and stops at 0 and 200. Over 100 is a digital boost that can make the voice crackle; only go above 100 when the user asks, and suggest stepping back down if they hear distortion. It exits 2 on anything else. It changes only the spoken lines and applies from the next line, with no restart. Do not change the Mac's system volume for this.
 
 ## Diagnosing "nothing was spoken"
 First check that the reporter is running (`pgrep -fl cmux-voice-reporter`) and read the end of `spoken.log`. Then read the event journal for the pane. Get `<seq>` from `cmux events --snapshot` (`resume.latest_seq` minus about 2000), and the pane UUID from `cmux --id-format both tree --all --json`. The stream retains a few thousand events, so filter by name or a short replay times out:
